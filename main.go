@@ -95,5 +95,9 @@ func main() {
 
 	log.Printf("%v", state.list)
 
+	err = imap.Fetch("1:4", []string{"ALL"}, ch)
+	check(err)
+	state.Await(imap, ch)
+
 	log.Printf("done")
 }

@@ -185,6 +185,16 @@ func (imap *IMAP) Examine(mailbox string, ch ResponseChan) os.Error {
 	return imap.Send(fmt.Sprintf("EXAMINE %s", quote(mailbox)), ch)
 }
 
+func (imap *IMAP) Fetch(sequence string, fields []string, ch ResponseChan) os.Error {
+	var fieldsStr string
+	if len(fields) == 1 {
+		fieldsStr = fields[0]
+	} else {
+		fieldsStr = "\"" + strings.Join(fields, " ") + "\""
+	}
+	return imap.Send(fmt.Sprintf("FETCH %s %s", sequence, fieldsStr), ch);
+}
+
 func (imap *IMAP) StartLoops() {
 	go func() {
 		err := imap.ReadLoop()
@@ -346,6 +356,7 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 			return &ResponseExists{num}, nil
 		case "RECENT":
 			return &ResponseRecent{num}, nil
+		//case "FETCH":
 		}
 	}
 
