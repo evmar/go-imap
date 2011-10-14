@@ -35,6 +35,13 @@ func (p *Parser) expect(text string) bool {
 	return true
 }
 
+func (p *Parser) expectEOF() os.Error {
+	if p.cur != len(p.input) {
+		return p.error("expected end of input")
+	}
+	return nil
+}
+
 func (p *Parser) parseAtom() string {
 /*
 ATOM-CHAR       = <any CHAR except atom-specials>

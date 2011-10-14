@@ -223,15 +223,44 @@ type Capabilities struct {
 	caps []string
 }
 
+type List struct {
+	flags []string
+	delim string
+	mailbox string
+}
+
 func ParseResponse(text string) (interface{}, os.Error) {
-	command, rest := splitToken(text)
+	command, text := splitToken(text)
 	switch command {
 	case "CAPABILITY":
-		caps := strings.Split(rest, " ")
+		caps := strings.Split(text, " ")
 		return &Capabilities{caps}, nil
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
+		p := newParser(text)
+		flags, err := p.parseParenList()
+		if err != nil {
+			return nil, err
+		}
+		p.expect(" ")
 
+		delim, err := p.parseString()
+		if err != nil {
+			return nil, err
+		}
+		p.expect(" ")
+
+		mailbox, err := p.parseString()
+		if err != nil {
+			return nil, err
+		}
+
+		err = p.expectEOF()
+		if err != nil {
+			return nil, err
+		}
+
+		return &List{flags, delim, mailbox}, nil
 	}
 	return nil, fmt.Errorf("unhandled untagged response %s", text)
 }
