@@ -274,11 +274,54 @@ type ResponseExists struct {
 type ResponseRecent struct {
 	count int
 }
-type ResponseFetch struct {
-	sexp Sexp
+
+type Address struct {
+	name, source, address string
+}
+func (a *Address) FromSexp(s []Sexp) {
+	if name := nilOrString(s[0]); name != nil {
+		a.name = *name
+	}
+	if source := nilOrString(s[1]); source != nil {
+		a.source = *source
+	}
+	mbox := nilOrString(s[2])
+	host := nilOrString(s[3])
+	if mbox != nil && host != nil {
+		address := *mbox + "@" + *host
+		a.address = address
+	}
+}
+func AddressListFromSexp(s Sexp) []Address {
+	if s == nil {
+		return nil
+	}
+
+	saddrs := s.([]Sexp)
+	addrs := make([]Address, len(saddrs))
+	for i, s := range saddrs {
+		addrs[i].FromSexp(s.([]Sexp))
+	}
+	return addrs
 }
 
+type ResponseFetchEnvelope struct {
+	date, subject, inReplyTo, messageId *string
+	from, sender, replyTo, to, cc, bcc []Address
+}
+
+type ResponseFetch struct {
+	msg int
+	flags Sexp
+	envelope ResponseFetchEnvelope
+	internalDate string
+	size int
+}
+
+
 func ParseResponse(origtext string) (interface{}, os.Error) {
+	// TODO: handle panics.
+
 	command, text := splitToken(origtext)
 	switch command {
 	case "CAPABILITY":
@@ -365,7 +408,44 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 			if err != nil {
 				return nil, err
 			}
-			return &ResponseFetch{sexp}, nil
+			if len(sexp) % 2 != 0 {
+				return nil, fmt.Errorf("fetch sexp must have even number of items")
+			}
+			fetch := &ResponseFetch{msg:num}
+			for i := 0; i < len(sexp); i += 2 {
+				key := sexp[i].(string)
+				switch key {
+				case "ENVELOPE":
+					env := sexp[i+1].([]Sexp)
+					log.Printf("env %+v", env)
+					// This format is insane.
+					if len(env) != 10 {
+						return nil, fmt.Errorf("envelope needed 10 fields, had %d", len(env))
+					}
+					fetch.envelope.date = nilOrString(env[0])
+					fetch.envelope.subject = nilOrString(env[1])
+					fetch.envelope.from = AddressListFromSexp(env[2])
+					fetch.envelope.sender = AddressListFromSexp(env[3])
+					fetch.envelope.replyTo = AddressListFromSexp(env[4])
+					fetch.envelope.to = AddressListFromSexp(env[5])
+					fetch.envelope.cc = AddressListFromSexp(env[6])
+					fetch.envelope.bcc = AddressListFromSexp(env[7])
+					fetch.envelope.inReplyTo = nilOrString(env[8])
+					fetch.envelope.messageId = nilOrString(env[9])
+				case "FLAGS":
+					fetch.flags = sexp[i+1]
+				case "INTERNALDATE":
+					fetch.internalDate = sexp[i+1].(string)
+				case "RFC822.SIZE":
+					fetch.size, err = strconv.Atoi(sexp[i+1].(string))
+					if err != nil {
+						return nil, err
+					}
+				default:
+					panic(fmt.Sprintf("%#v", key))
+				}
+			}
+			return fetch, nil
 		}
 	}
 

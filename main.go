@@ -44,6 +44,8 @@ func (s *State) ProcessUpdate(update interface{}) {
 		s.list.flags = update.flags
 	case *ResponseRecent:
 		// ignore
+	case *ResponseFetch:
+		log.Printf("fetched message content %+v", update)
 	default:
 		log.Printf("unhandled update type %T", update)
 	}

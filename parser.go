@@ -15,6 +15,13 @@ type Sexp interface{}
 //   string
 //   []Sexp
 //   nil
+func nilOrString(s Sexp) *string {
+	if s == nil {
+		return nil
+	}
+	str := s.(string)
+	return &str
+}
 
 type Parser struct {
 	input string
