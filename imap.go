@@ -10,6 +10,7 @@ import (
 	"net/textproto"
 	"io"
 	"strconv"
+	"sync"
 )
 
 func check(err os.Error) {
@@ -35,9 +36,54 @@ func (s Status) String() string {
 type Tag int
 const Untagged = Tag(-1)
 
+type Response struct {
+	status Status
+	text string
+}
+
 type IMAP struct {
+	// Client thread.
+	nextTag int
+
+	// Background thread.
 	r *textproto.Reader
 	w io.Writer
+
+	lock sync.Mutex
+	pending map[Tag]chan *Response
+}
+
+func NewIMAP() *IMAP {
+	return &IMAP{pending:make(map[Tag]chan *Response)}
+}
+
+func (imap *IMAP) Connect(hostport string) (string, os.Error) {
+	log.Printf("dial")
+	conn, err := tls.Dial("tcp", hostport, nil)
+	if err != nil {
+		return "", err
+	}
+
+	imap.r = textproto.NewReader(bufio.NewReader(conn))
+	imap.w = conn
+
+	log.Printf("readline")
+	tag, text, err := imap.ReadLine()
+	if err != nil {
+		return "", err
+	}
+	if tag != Untagged {
+		return "", fmt.Errorf("expected untagged server hello. got %q", text)
+	}
+
+	status, text, err := ParseStatus(text)
+	if status != OK {
+		return "", fmt.Errorf("server hello %v %q", status, text)
+	}
+
+	imap.StartLoops()
+
+	return text, nil
 }
 
 func splitToken(text string) (string, string) {
@@ -53,13 +99,14 @@ func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
 	if err != nil {
 		return Untagged, "", err
 	}
+	log.Printf("<-server %q", line)
 
 	switch line[0] {
 	case '*':
 		return Untagged, line[2:], nil
 	case 'a':
 		tagstr, text := splitToken(line)
-		tagnum, err := strconv.Atoi(tagstr)
+		tagnum, err := strconv.Atoi(tagstr[1:])
 		if err != nil {
 			return Untagged, "", err
 		}
@@ -69,15 +116,82 @@ func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
 	return Untagged, "", fmt.Errorf("unexpected response %q", line)
 }
 
-func (imap *IMAP) ReadStatus() (Status, string, os.Error) {
-	tag, text, err := imap.ReadLine()
+func (imap *IMAP) Send(command string) (Tag, os.Error) {
+	tag := Tag(imap.nextTag)
+	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
+	log.Printf("server<- %q...", toSend[0:10])
+
+	_, err := imap.w.Write(toSend)
 	if err != nil {
-		return BAD, "", err
-	}
-	if tag != Untagged {
-		return BAD, "", fmt.Errorf("got tagged response %q when expecting status", text)
+		return Untagged, err
 	}
 
+	imap.lock.Lock()
+	imap.pending[tag] = make(chan *Response, 1)
+	imap.lock.Unlock()
+
+	imap.nextTag++
+	return tag, err
+}
+
+func (imap *IMAP) Await(tag Tag) *Response {
+	imap.lock.Lock()
+	ch := imap.pending[tag]
+	imap.lock.Unlock()
+
+	r := <-ch
+
+	imap.lock.Lock()
+	imap.pending[tag] = nil, false
+	imap.lock.Unlock()
+
+	return r
+}
+
+func (imap *IMAP) Auth(user string, pass string) (*Response, os.Error) {
+	tag, err := imap.Send(fmt.Sprintf("LOGIN %s %s", user, pass))
+	if err != nil {
+		return nil, err
+	}
+	r := imap.Await(tag)
+	return r, nil
+}
+
+func (imap *IMAP) StartLoops() {
+	go func() {
+		err := imap.ReadLoop()
+		panic(err)
+	}()
+}
+
+func (imap *IMAP) ReadLoop() os.Error {
+	for {
+		tag, text, err := imap.ReadLine()
+		if err != nil {
+			return err
+		}
+		text = text
+
+		if tag == Untagged {
+		} else {
+			status, text, err := ParseStatus(text)
+			if err != nil {
+				return err
+			}
+
+			imap.lock.Lock()
+			ch := imap.pending[tag]
+			imap.lock.Unlock()
+
+			log.Printf("wrote chan %v", status)
+			ch <- &Response{status, text}
+		}
+	}
+	return nil
+}
+
+func ParseStatus(text string) (Status, string, os.Error) {
+	// TODO: response code
 	codes := map[string]Status{
 		"OK": OK,
 		"NO": NO,
@@ -92,26 +206,34 @@ func (imap *IMAP) ReadStatus() (Status, string, os.Error) {
 	return status, text, nil
 }
 
-/*
-func (p *IMAP) Command(cmd string) os.Error {
-	w.Write(
-	return nil
-}
+func loadAuth(path string) (string, string) {
+	f, err := os.Open(path)
+	check(err)
+	r := bufio.NewReader(f)
 
-func (p *IMAP) Auth(user string, pass string) os.Error {
-	return nil
+	user, isPrefix, err := r.ReadLine()
+	check(err)
+	if isPrefix {
+		panic("prefix")
+	}
+
+	pass, isPrefix, err := r.ReadLine()
+	check(err)
+	if isPrefix {
+		panic("prefix")
+	}
+
+	return string(user), string(pass)
 }
-*/
 
 func main() {
-	log.Printf("dial")
-	conn, err := tls.Dial("tcp", "imap.gmail.com:993", nil)
-	check(err)
+	user, pass := loadAuth("auth")
 
-	r := textproto.NewReader(bufio.NewReader(conn))
-	p := IMAP{r, conn}
-
-	status, text, err := p.ReadStatus()
+	imap := NewIMAP()
+	text, err := imap.Connect("imap.gmail.com:993")
 	check(err)
-	log.Printf("%v %v %v", status, text, err)
+	log.Printf("connected %q", text)
+
+	resp, err := imap.Auth(user, pass)
+	log.Printf("%v", resp)
 }
