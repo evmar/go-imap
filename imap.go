@@ -116,45 +116,33 @@ func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
 	return Untagged, "", fmt.Errorf("unexpected response %q", line)
 }
 
-func (imap *IMAP) Send(command string) (Tag, os.Error) {
+func (imap *IMAP) Send(command string, ch chan *Response) (Tag, os.Error) {
 	tag := Tag(imap.nextTag)
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
 	log.Printf("server<- %q...", toSend[0:10])
+
+	if ch != nil {
+		imap.lock.Lock()
+		imap.pending[tag] = ch
+		imap.lock.Unlock()
+	}
 
 	_, err := imap.w.Write(toSend)
 	if err != nil {
 		return Untagged, err
 	}
 
-	imap.lock.Lock()
-	imap.pending[tag] = make(chan *Response, 1)
-	imap.lock.Unlock()
-
 	imap.nextTag++
 	return tag, err
 }
 
-func (imap *IMAP) Await(tag Tag) *Response {
-	imap.lock.Lock()
-	ch := imap.pending[tag]
-	imap.lock.Unlock()
-
-	r := <-ch
-
-	imap.lock.Lock()
-	imap.pending[tag] = nil, false
-	imap.lock.Unlock()
-
-	return r
-}
-
 func (imap *IMAP) Auth(user string, pass string) (*Response, os.Error) {
-	tag, err := imap.Send(fmt.Sprintf("LOGIN %s %s", user, pass))
+	ch := make(chan *Response, 1)
+	_, err := imap.Send(fmt.Sprintf("LOGIN %s %s", user, pass), ch)
 	if err != nil {
 		return nil, err
 	}
-	r := imap.Await(tag)
-	return r, nil
+	return <-ch, nil
 }
 
 func (imap *IMAP) StartLoops() {
@@ -177,6 +165,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			if err != nil {
 				return err
 			}
+			log.Printf("%v", resp)
 		} else {
 			status, text, err := ParseStatus(text)
 			if err != nil {
@@ -185,10 +174,13 @@ func (imap *IMAP) ReadLoop() os.Error {
 
 			imap.lock.Lock()
 			ch := imap.pending[tag]
+			imap.pending[tag] = nil, false
 			imap.lock.Unlock()
 
-			log.Printf("wrote chan %v", status)
-			ch <- &Response{status, text}
+			if ch != nil {
+				log.Printf("wrote chan %v", status)
+				ch <- &Response{status, text}
+			}
 		}
 	}
 	return nil
@@ -210,11 +202,11 @@ func ParseStatus(text string) (Status, string, os.Error) {
 	return status, text, nil
 }
 
-type Capabilities {
+type Capabilities struct {
 	caps []string
 }
 
-func ParseResponse(text string) (interface{}, err) {
+func ParseResponse(text string) (interface{}, os.Error) {
 	command, rest := splitToken(text)
 	switch command {
 	case "CAPABILITY":
