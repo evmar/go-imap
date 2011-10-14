@@ -6,8 +6,11 @@ import (
 
 func TestParse(t *testing.T) {
 	input := "(\\HasNoChildren) \"/\" \"INBOX\""
-	p := NewParser(input)
-	ps := p.parseParenList()
+	p := newParser(input)
+	ps, err := p.parseParenList()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(ps) != 1 || ps[0] != "\\HasNoChildren" {
 		t.Fatalf("parenlist")
 	}
@@ -16,8 +19,11 @@ func TestParse(t *testing.T) {
 		t.FailNow()
 	}
 
-	d, ok := p.parseString()
-	if !ok || d != "/" {
+	d, err := p.parseString()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d != "/" {
 		t.FailNow()
 	}
 
@@ -25,8 +31,11 @@ func TestParse(t *testing.T) {
 		t.FailNow()
 	}
 
-	box, ok := p.parseString()
-	if !ok || box != "INBOX" {
+	box, err := p.parseString()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if box != "INBOX" {
 		t.FailNow()
 	}
 }

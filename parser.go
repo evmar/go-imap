@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
 )
 
 func init() {
@@ -14,8 +16,12 @@ type Parser struct {
 	cur int
 }
 
-func NewParser(input string) *Parser {
+func newParser(input string) *Parser {
 	return &Parser{input, 0}
+}
+
+func (p *Parser) error(text string) os.Error {
+	return fmt.Errorf("parse error in %q near offset %d: %s", p.input, p.cur, text)
 }
 
 func (p *Parser) expect(text string) bool {
@@ -49,9 +55,9 @@ L:
 	return atom
 }
 
-func (p *Parser) parseParenList() []string {
+func (p *Parser) parseParenList() ([]string, os.Error) {
 	if !p.expect("(") {
-		return nil
+		return nil, p.error("expected '('")
 	}
 
 	atoms := make([]string, 0, 4)
@@ -63,19 +69,21 @@ func (p *Parser) parseParenList() []string {
 
 		atoms = append(atoms, atom)
 
-		if p.expect(")") {
+		if !p.expect(" ") {
 			break
 		}
-		if !p.expect(" ") {
-			return nil
-		}
 	}
-	return atoms
+
+	if !p.expect(")") {
+		return nil, p.error("expected ')'")
+	}
+
+	return atoms, nil
 }
 
-func (p *Parser) parseString() (parsedString string, ok bool) {
+func (p *Parser) parseString() (string, os.Error) {
 	if !p.expect("\"") {
-		return
+		return "", p.error("expected '\"'")
 	}
 	i := p.cur
 	for ; i < len(p.input); i++ {
@@ -85,15 +93,15 @@ func (p *Parser) parseString() (parsedString string, ok bool) {
 		if p.input[i] == '\\' {
 			i++
 			if p.input[i] != '"' && p.input[i] != '\\' {
-				return
+				return "", p.error("expected special after backslash")
 			}
 		}
 	}
 	str := p.input[p.cur:i]
 	p.cur = i
 	if !p.expect("\"") {
-		return
+		return "", p.error("expected '\"'")
 	}
 
-	return str, true
+	return str, nil
 }
