@@ -1,3 +1,5 @@
 *.6
 /auth
 /imap
+_test*
+6.out

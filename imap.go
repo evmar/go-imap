@@ -33,6 +33,11 @@ func (s Status) String() string {
 	}[s];
 }
 
+const (
+	WildcardAny = "%"
+	WildcardAnyRecursive = "*"
+)
+
 type Tag int
 const Untagged = Tag(-1)
 
@@ -40,6 +45,8 @@ type Response struct {
 	status Status
 	text string
 }
+
+type ResponseChan chan *Response
 
 type IMAP struct {
 	// Client thread.
@@ -116,10 +123,19 @@ func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
 	return Untagged, "", fmt.Errorf("unexpected response %q", line)
 }
 
-func (imap *IMAP) Send(command string, ch chan *Response) (Tag, os.Error) {
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
 	tag := Tag(imap.nextTag)
+	imap.nextTag++
+
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
-	log.Printf("server<- %q...", toSend[0:10])
+	log.Printf("server<- %q...", toSend[0:min(len(command),20)])
 
 	if ch != nil {
 		imap.lock.Lock()
@@ -128,21 +144,22 @@ func (imap *IMAP) Send(command string, ch chan *Response) (Tag, os.Error) {
 	}
 
 	_, err := imap.w.Write(toSend)
-	if err != nil {
-		return Untagged, err
-	}
-
-	imap.nextTag++
-	return tag, err
+	return err
 }
 
-func (imap *IMAP) Auth(user string, pass string) (*Response, os.Error) {
-	ch := make(chan *Response, 1)
-	_, err := imap.Send(fmt.Sprintf("LOGIN %s %s", user, pass), ch)
-	if err != nil {
-		return nil, err
+func (imap *IMAP) Auth(user string, pass string, ch ResponseChan) os.Error {
+	return imap.Send(fmt.Sprintf("LOGIN %s %s", user, pass), ch)
+}
+
+func quote(in string) string {
+	if strings.IndexAny(in, "\r\n") >= 0 {
+		panic("invalid characters in string to quote")
 	}
-	return <-ch, nil
+	return "\"" + in + "\""
+}
+
+func (imap *IMAP) List(reference string, name string, ch ResponseChan) os.Error {
+	return imap.Send(fmt.Sprintf("LIST %s %s", quote(reference), quote(name)), ch)
 }
 
 func (imap *IMAP) StartLoops() {
@@ -212,6 +229,9 @@ func ParseResponse(text string) (interface{}, os.Error) {
 	case "CAPABILITY":
 		caps := strings.Split(rest, " ")
 		return &Capabilities{caps}, nil
+	case "LIST":
+		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
+
 	}
 	return nil, fmt.Errorf("unhandled untagged response %s", text)
 }
@@ -244,6 +264,13 @@ func main() {
 	check(err)
 	log.Printf("connected %q", text)
 
-	resp, err := imap.Auth(user, pass)
-	log.Printf("%v", resp)
+	ch := make(chan *Response, 1)
+
+	err = imap.Auth(user, pass, ch)
+	check(err)
+	log.Printf("%v", <-ch)
+
+	err = imap.List("", WildcardAny, ch)
+	check(err)
+	log.Printf("%v", <-ch)
 }
