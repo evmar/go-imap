@@ -55,6 +55,7 @@ type IMAP struct {
 	// Background thread.
 	r *textproto.Reader
 	w io.Writer
+	protoLog *log.Logger
 
 	lock sync.Mutex
 	pending map[Tag]chan *Response
@@ -106,7 +107,9 @@ func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
 	if err != nil {
 		return Untagged, "", err
 	}
-	log.Printf("<-server %q", line)
+	if imap.protoLog != nil {
+		imap.protoLog.Printf("<-server %q", line)
+	}
 
 	switch line[0] {
 	case '*':
@@ -135,7 +138,9 @@ func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
 	imap.nextTag++
 
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
-	log.Printf("server<- %q...", toSend[0:min(len(command),20)])
+	if imap.protoLog != nil {
+		imap.protoLog.Printf("server<- %q...", toSend[0:min(len(command),20)])
+	}
 
 	if ch != nil {
 		imap.lock.Lock()
@@ -289,6 +294,8 @@ func main() {
 	user, pass := loadAuth("auth")
 
 	imap := NewIMAP()
+	imap.protoLog = log.New(os.Stderr, "proto ", log.Ltime)
+
 	text, err := imap.Connect("imap.gmail.com:993")
 	check(err)
 	log.Printf("connected %q", text)
