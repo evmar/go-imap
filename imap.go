@@ -66,6 +66,8 @@ type IMAP struct {
 	// Client thread.
 	nextTag int
 
+	responseData chan interface{}
+
 	// Background thread.
 	r *textproto.Reader
 	w io.Writer
@@ -80,7 +82,6 @@ func NewIMAP() *IMAP {
 }
 
 func (imap *IMAP) Connect(hostport string) (string, os.Error) {
-	log.Printf("dial")
 	conn, err := tls.Dial("tcp", hostport, nil)
 	if err != nil {
 		return "", err
@@ -89,7 +90,6 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 	imap.r = textproto.NewReader(bufio.NewReader(conn))
 	imap.w = conn
 
-	log.Printf("readline")
 	tag, text, err := imap.ReadLine()
 	if err != nil {
 		return "", err
@@ -205,7 +205,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			if err != nil {
 				return err
 			}
-			log.Printf("%v", resp)
+			imap.responseData <- resp
 		} else {
 			status, text, err := ParseStatus(text)
 			if err != nil {
@@ -376,14 +376,16 @@ func main() {
 	user, pass := loadAuth("auth")
 
 	imap := NewIMAP()
+	imap.responseData = make(chan interface{}, 100)
 	imap.protoLog = log.New(os.Stderr, "proto ", log.Ltime)
 
-	text, err := imap.Connect("imap.gmail.com:993")
+	log.Printf("connecting")
+	_, err := imap.Connect("imap.gmail.com:993")
 	check(err)
-	log.Printf("connected %q", text)
 
 	ch := make(chan *Response, 1)
 
+	log.Printf("logging in")
 	err = imap.Auth(user, pass, ch)
 	check(err)
 	log.Printf("%v", <-ch)
@@ -396,7 +398,16 @@ func main() {
 
 	err = imap.Examine("lkml", ch)
 	check(err)
-	log.Printf("%v", <-ch)
+L:
+	for {
+		select {
+		case update := <-imap.responseData:
+			log.Printf("update %T %v", update, update)
+		case response := <-ch:
+			log.Printf("response %v", response)
+			break L
+		}
+	}
 
 	log.Printf("done")
 }
