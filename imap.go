@@ -38,6 +38,20 @@ const (
 	WildcardAnyRecursive = "*"
 )
 
+type TriBool int
+const (
+	TriUnknown = TriBool(iota)
+	TriTrue
+	TriFalse
+)
+func (t TriBool) String() string {
+	switch t {
+	case TriTrue: return "true"
+	case TriFalse: return "false"
+	}
+	return "unknown"
+}
+
 type Tag int
 const Untagged = Tag(-1)
 
@@ -229,7 +243,10 @@ type Capabilities struct {
 }
 
 type List struct {
-	flags []string
+	inferiors TriBool
+	selectable TriBool
+	marked TriBool
+	children TriBool
 	delim string
 	mailbox string
 }
@@ -265,7 +282,27 @@ func ParseResponse(text string) (interface{}, os.Error) {
 			return nil, err
 		}
 
-		return &List{flags, delim, mailbox}, nil
+		list := &List{delim:delim, mailbox:mailbox}
+		for _, flag := range flags {
+			switch flag {
+			case "\\Noinferiors":
+				list.inferiors = TriFalse
+			case "\\Noselect":
+				list.selectable = TriFalse
+			case "\\Marked":
+				list.marked = TriTrue
+			case "\\Unmarked":
+				list.marked = TriFalse
+			case "\\HasChildren":
+				list.children = TriTrue
+			case "\\HasNoChildren":
+				list.children = TriFalse
+			default:
+				return nil, fmt.Errorf("unknown list flag %q", flag)
+			}
+		}
+
+		return list, nil
 	}
 	return nil, fmt.Errorf("unhandled untagged response %s", text)
 }
