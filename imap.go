@@ -108,7 +108,7 @@ func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
 		return Untagged, "", err
 	}
 	if imap.protoLog != nil {
-		imap.protoLog.Printf("<-server %q", line)
+		imap.protoLog.Printf("<-server %s", line)
 	}
 
 	switch line[0] {
@@ -139,7 +139,7 @@ func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
 
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
 	if imap.protoLog != nil {
-		imap.protoLog.Printf("server<- %q...", toSend[0:min(len(command),20)])
+		imap.protoLog.Printf("server<- %s...", toSend[0:min(len(command),20)])
 	}
 
 	if ch != nil {
