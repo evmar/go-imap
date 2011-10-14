@@ -19,7 +19,7 @@ func TestParseBasic(t *testing.T) {
 func TestParseSimple(t *testing.T) {
 	input := "(\\HasNoChildren) \"/\" \"INBOX\""
 	p := newParser(input)
-	ps, err := p.parseParenList()
+	ps, err := p.parseParenStringList()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestParseSimple(t *testing.T) {
 func TestParseComplex(t *testing.T) {
 	input := "(ENVELOPE (\"Fri, 14 Oct 2011 13:51:22 -0700\" \"Re: [PATCH 1/1] added code to export CAP_LAST_CAP in /proc/sys/kernel modeled after ngroups_max\" ((\"Andrew Morton\" NIL \"akpm\" \"linux-foundation.org\")) ((NIL NIL \"linux-kernel-owner\" \"vger.kernel.org\")) ((\"Andrew Morton\" NIL \"akpm\" \"linux-foundation.org\")) ((\"Dan Ballard\" NIL \"dan\" \"mindstab.net\")) ((\"Ingo Molnar\" NIL \"mingo\" \"elte.hu\") (\"Lennart Poettering\" NIL \"lennart\" \"poettering.net\") (\"Kay Sievers\" NIL \"kay.sievers\" \"vrfy.org\") (NIL NIL \"linux-kernel\" \"vger.kernel.org\")) NIL \"<1318460194-31983-1-git-send-email-dan@mindstab.net>\" \"<20111014135122.4bb95565.akpm@linux-foundation.org>\") FLAGS () INTERNALDATE \"14-Oct-2011 20:51:30 +0000\" RFC822.SIZE 4623)"
 	p := newParser(input)
-	d, err := p.parseParenList()
+	d, err := p.parseSexp()
 	if err != nil {
 		t.Fatal(err)
 	}

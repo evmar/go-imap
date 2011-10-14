@@ -274,6 +274,9 @@ type ResponseExists struct {
 type ResponseRecent struct {
 	count int
 }
+type ResponseFetch struct {
+	sexp Sexp
+}
 
 func ParseResponse(origtext string) (interface{}, os.Error) {
 	command, text := splitToken(origtext)
@@ -350,13 +353,19 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 
 	num, err := strconv.Atoi(command)
 	if err == nil {
-		command, _ := splitToken(text)
+		command, text := splitToken(text)
 		switch command {
 		case "EXISTS":
 			return &ResponseExists{num}, nil
 		case "RECENT":
 			return &ResponseRecent{num}, nil
-		//case "FETCH":
+		case "FETCH":
+			p := newParser(text)
+			sexp, err := p.parseSexp()
+			if err != nil {
+				return nil, err
+			}
+			return &ResponseFetch{sexp}, nil
 		}
 	}
 

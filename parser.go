@@ -78,7 +78,7 @@ L:
 	return atom, nil
 }
 
-func (p *Parser) parseParenList() ([]Sexp, os.Error) {
+func (p *Parser) parseSexp() ([]Sexp, os.Error) {
 	if !p.expect("(") {
 		return nil, p.error("expected '('")
 	}
@@ -94,7 +94,7 @@ L:
 		var err os.Error
 		switch p.input[p.cur] {
 		case '(':
-			exp, err = p.parseParenList()
+			exp, err = p.parseSexp()
 		case '"':
 			exp, err = p.parseString()
 		case ')':
@@ -124,7 +124,7 @@ L:
 }
 
 func (p *Parser) parseParenStringList() ([]string, os.Error) {
-	sexp, err := p.parseParenList()
+	sexp, err := p.parseSexp()
 	if err != nil {
 		return nil, err
 	}
