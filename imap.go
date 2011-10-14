@@ -319,8 +319,13 @@ type ResponseFetch struct {
 }
 
 
-func ParseResponse(origtext string) (interface{}, os.Error) {
-	// TODO: handle panics.
+func ParseResponse(origtext string) (resp interface{}, err os.Error) {
+	defer func() {
+		if e := recover(); e != nil {
+			resp = nil
+			err = e.(os.Error)
+		}
+	}()
 
 	command, text := splitToken(origtext)
 	switch command {
@@ -331,26 +336,18 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
 		p := newParser(text)
 		flags, err := p.parseParenStringList()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 		p.expect(" ")
 
 		delim, err := p.parseString()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 		p.expect(" ")
 
 		mailbox, err := p.parseString()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 
 		err = p.expectEOF()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 
 		list := &ResponseList{delim:delim, mailbox:mailbox}
 		for _, flag := range flags {
@@ -376,21 +373,15 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 	case "FLAGS":
 		p := newParser(text)
 		flags, err := p.parseParenStringList()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 		err = p.expectEOF()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 
 		return &ResponseFlags{flags}, nil
 
 	case "OK", "NO", "BAD":
 		status, text, err := ParseStatus(origtext)
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 		return &Response{status, text}, nil
 	}
 
@@ -405,11 +396,9 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 		case "FETCH":
 			p := newParser(text)
 			sexp, err := p.parseSexp()
-			if err != nil {
-				return nil, err
-			}
+			check(err)
 			if len(sexp) % 2 != 0 {
-				return nil, fmt.Errorf("fetch sexp must have even number of items")
+				panic("fetch sexp must have even number of items")
 			}
 			fetch := &ResponseFetch{msg:num}
 			for i := 0; i < len(sexp); i += 2 {
