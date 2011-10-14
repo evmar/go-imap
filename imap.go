@@ -181,6 +181,10 @@ func (imap *IMAP) List(reference string, name string, ch ResponseChan) os.Error 
 	return imap.Send(fmt.Sprintf("LIST %s %s", quote(reference), quote(name)), ch)
 }
 
+func (imap *IMAP) Examine(mailbox string, ch ResponseChan) os.Error {
+	return imap.Send(fmt.Sprintf("EXAMINE %s", quote(mailbox)), ch)
+}
+
 func (imap *IMAP) StartLoops() {
 	go func() {
 		err := imap.ReadLoop()
@@ -214,7 +218,6 @@ func (imap *IMAP) ReadLoop() os.Error {
 			imap.lock.Unlock()
 
 			if ch != nil {
-				log.Printf("wrote chan %v", status)
 				ch <- &Response{status, text}
 			}
 		}
@@ -251,8 +254,19 @@ type List struct {
 	mailbox string
 }
 
-func ParseResponse(text string) (interface{}, os.Error) {
-	command, text := splitToken(text)
+type Flags struct {
+	flags []string
+}
+
+type Exists struct {
+	count int
+}
+type Recent struct {
+	count int
+}
+
+func ParseResponse(origtext string) (interface{}, os.Error) {
+	command, text := splitToken(origtext)
 	switch command {
 	case "CAPABILITY":
 		caps := strings.Split(text, " ")
@@ -301,9 +315,40 @@ func ParseResponse(text string) (interface{}, os.Error) {
 				return nil, fmt.Errorf("unknown list flag %q", flag)
 			}
 		}
-
 		return list, nil
+
+	case "FLAGS":
+		p := newParser(text)
+		flags, err := p.parseParenList()
+		if err != nil {
+			return nil, err
+		}
+		err = p.expectEOF()
+		if err != nil {
+			return nil, err
+		}
+
+		return &Flags{flags}, nil
+
+	case "OK", "NO", "BAD":
+		status, text, err := ParseStatus(origtext)
+		if err != nil {
+			return nil, err
+		}
+		return &Response{status, text}, nil
 	}
+
+	num, err := strconv.Atoi(command)
+	if err == nil {
+		command, _ := splitToken(text)
+		switch command {
+		case "EXISTS":
+			return &Exists{num}, nil
+		case "RECENT":
+			return &Recent{num}, nil
+		}
+	}
+
 	return nil, fmt.Errorf("unhandled untagged response %s", text)
 }
 
@@ -343,7 +388,15 @@ func main() {
 	check(err)
 	log.Printf("%v", <-ch)
 
+/*
 	err = imap.List("", WildcardAny, ch)
 	check(err)
 	log.Printf("%v", <-ch)
+*/
+
+	err = imap.Examine("lkml", ch)
+	check(err)
+	log.Printf("%v", <-ch)
+
+	log.Printf("done")
 }
