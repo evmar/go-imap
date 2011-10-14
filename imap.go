@@ -241,11 +241,11 @@ func ParseStatus(text string) (Status, string, os.Error) {
 	return status, text, nil
 }
 
-type Capabilities struct {
+type ResponseCapabilities struct {
 	caps []string
 }
 
-type List struct {
+type ResponseList struct {
 	inferiors TriBool
 	selectable TriBool
 	marked TriBool
@@ -254,14 +254,14 @@ type List struct {
 	mailbox string
 }
 
-type Flags struct {
+type ResponseFlags struct {
 	flags []string
 }
 
-type Exists struct {
+type ResponseExists struct {
 	count int
 }
-type Recent struct {
+type ResponseRecent struct {
 	count int
 }
 
@@ -270,7 +270,7 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 	switch command {
 	case "CAPABILITY":
 		caps := strings.Split(text, " ")
-		return &Capabilities{caps}, nil
+		return &ResponseCapabilities{caps}, nil
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
 		p := newParser(text)
@@ -296,7 +296,7 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 			return nil, err
 		}
 
-		list := &List{delim:delim, mailbox:mailbox}
+		list := &ResponseList{delim:delim, mailbox:mailbox}
 		for _, flag := range flags {
 			switch flag {
 			case "\\Noinferiors":
@@ -328,7 +328,7 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 			return nil, err
 		}
 
-		return &Flags{flags}, nil
+		return &ResponseFlags{flags}, nil
 
 	case "OK", "NO", "BAD":
 		status, text, err := ParseStatus(origtext)
@@ -343,71 +343,11 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 		command, _ := splitToken(text)
 		switch command {
 		case "EXISTS":
-			return &Exists{num}, nil
+			return &ResponseExists{num}, nil
 		case "RECENT":
-			return &Recent{num}, nil
+			return &ResponseRecent{num}, nil
 		}
 	}
 
 	return nil, fmt.Errorf("unhandled untagged response %s", text)
-}
-
-func loadAuth(path string) (string, string) {
-	f, err := os.Open(path)
-	check(err)
-	r := bufio.NewReader(f)
-
-	user, isPrefix, err := r.ReadLine()
-	check(err)
-	if isPrefix {
-		panic("prefix")
-	}
-
-	pass, isPrefix, err := r.ReadLine()
-	check(err)
-	if isPrefix {
-		panic("prefix")
-	}
-
-	return string(user), string(pass)
-}
-
-func main() {
-	user, pass := loadAuth("auth")
-
-	imap := NewIMAP()
-	imap.responseData = make(chan interface{}, 100)
-	imap.protoLog = log.New(os.Stderr, "proto ", log.Ltime)
-
-	log.Printf("connecting")
-	_, err := imap.Connect("imap.gmail.com:993")
-	check(err)
-
-	ch := make(chan *Response, 1)
-
-	log.Printf("logging in")
-	err = imap.Auth(user, pass, ch)
-	check(err)
-	log.Printf("%v", <-ch)
-
-/*
-	err = imap.List("", WildcardAny, ch)
-	check(err)
-	log.Printf("%v", <-ch)
-*/
-
-	err = imap.Examine("lkml", ch)
-	check(err)
-L:
-	for {
-		select {
-		case update := <-imap.responseData:
-			log.Printf("update %T %v", update, update)
-		case response := <-ch:
-			log.Printf("response %v", response)
-			break L
-		}
-	}
-
-	log.Printf("done")
 }
