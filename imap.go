@@ -173,6 +173,10 @@ func (imap *IMAP) ReadLoop() os.Error {
 		text = text
 
 		if tag == Untagged {
+			resp, err := ParseResponse(text)
+			if err != nil {
+				return err
+			}
 		} else {
 			status, text, err := ParseStatus(text)
 			if err != nil {
@@ -204,6 +208,20 @@ func ParseStatus(text string) (Status, string, os.Error) {
 		return BAD, "", fmt.Errorf("unexpected status %q", code)
 	}
 	return status, text, nil
+}
+
+type Capabilities {
+	caps []string
+}
+
+func ParseResponse(text string) (interface{}, err) {
+	command, rest := splitToken(text)
+	switch command {
+	case "CAPABILITY":
+		caps := strings.Split(rest, " ")
+		return &Capabilities{caps}, nil
+	}
+	return nil, fmt.Errorf("unhandled untagged response %s", text)
 }
 
 func loadAuth(path string) (string, string) {
