@@ -284,7 +284,7 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
 		p := newParser(text)
-		flags, err := p.parseParenList()
+		flags, err := p.parseParenStringList()
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +329,7 @@ func ParseResponse(origtext string) (interface{}, os.Error) {
 
 	case "FLAGS":
 		p := newParser(text)
-		flags, err := p.parseParenList()
+		flags, err := p.parseParenStringList()
 		if err != nil {
 			return nil, err
 		}

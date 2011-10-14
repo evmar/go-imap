@@ -10,6 +10,11 @@ func init() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 }
 
+type Sexp interface{}
+// One of:
+//   string
+//   []Sexp
+//   nil
 
 type Parser struct {
 	input string
@@ -42,7 +47,7 @@ func (p *Parser) expectEOF() os.Error {
 	return nil
 }
 
-func (p *Parser) parseAtom() string {
+func (p *Parser) parseAtom() (string, os.Error) {
 /*
 ATOM-CHAR       = <any CHAR except atom-specials>
 
@@ -53,28 +58,58 @@ atom-specials   = "(" / ")" / "{" / SP / CTL / list-wildcards /
 L:
 	for ; i < len(p.input); i++ {
 		switch p.input[i] {
-		case '(', ')', '{', ' ': break L
-		// XXX handle others.
+		case '(', ')', '{', ' ',
+			// XXX: CTL
+			'%', '*',  // list-wildcards
+			'"':  // quoted-specials
+			// XXX: note that I dropped '\' from the quoted-specials,
+			// because it conflicts with parsing flags.  Who knows.
+			// XXX: resp-specials
+			break L
 		}
 	}
+
+	if i == p.cur {
+		return "", p.error("expected atom character")
+	}
+
 	atom := p.input[p.cur:i]
 	p.cur = i
-	return atom
+	return atom, nil
 }
 
-func (p *Parser) parseParenList() ([]string, os.Error) {
+func (p *Parser) parseParenList() ([]Sexp, os.Error) {
 	if !p.expect("(") {
 		return nil, p.error("expected '('")
 	}
 
-	atoms := make([]string, 0, 4)
+	sexps := make([]Sexp, 0, 4)
+L:
 	for {
-		atom := p.parseAtom()
-		if len(atom) == 0 {
+		if p.cur == len(p.input) {
 			break
 		}
 
-		atoms = append(atoms, atom)
+		var exp Sexp
+		var err os.Error
+		switch p.input[p.cur] {
+		case '(':
+			exp, err = p.parseParenList()
+		case '"':
+			exp, err = p.parseString()
+		case ')':
+			break L
+		default:
+			// TODO: may need to distinguish atom from string in practice.
+			exp, err = p.parseAtom()
+			if exp == "NIL" {
+				exp = nil
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		sexps = append(sexps, exp)
 
 		if !p.expect(" ") {
 			break
@@ -85,7 +120,23 @@ func (p *Parser) parseParenList() ([]string, os.Error) {
 		return nil, p.error("expected ')'")
 	}
 
-	return atoms, nil
+	return sexps, nil
+}
+
+func (p *Parser) parseParenStringList() ([]string, os.Error) {
+	sexp, err := p.parseParenList()
+	if err != nil {
+		return nil, err
+	}
+	strs := make([]string, len(sexp))
+	for i, s := range sexp {
+		str, ok := s.(string)
+		if !ok {
+			return nil, fmt.Errorf("list element %d is %T, not string", i, s)
+		}
+		strs[i] = str
+	}
+	return strs, nil
 }
 
 func (p *Parser) parseString() (string, os.Error) {
