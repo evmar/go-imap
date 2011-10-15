@@ -20,44 +20,51 @@ func check(err os.Error) {
 }
 
 type Status int
+
 const (
 	OK = Status(iota)
 	NO
 	BAD
 )
+
 func (s Status) String() string {
 	return []string{
 		"OK",
 		"NO",
 		"BAD",
-	}[s];
+	}[s]
 }
 
 const (
-	WildcardAny = "%"
+	WildcardAny          = "%"
 	WildcardAnyRecursive = "*"
 )
 
 type TriBool int
+
 const (
 	TriUnknown = TriBool(iota)
 	TriTrue
 	TriFalse
 )
+
 func (t TriBool) String() string {
 	switch t {
-	case TriTrue: return "true"
-	case TriFalse: return "false"
+	case TriTrue:
+		return "true"
+	case TriFalse:
+		return "false"
 	}
 	return "unknown"
 }
 
 type Tag int
+
 const Untagged = Tag(-1)
 
 type Response struct {
 	status Status
-	text string
+	text   string
 }
 
 type ResponseChan chan *Response
@@ -69,16 +76,16 @@ type IMAP struct {
 	responseData chan interface{}
 
 	// Background thread.
-	r *textproto.Reader
-	w io.Writer
+	r        *textproto.Reader
+	w        io.Writer
 	protoLog *log.Logger
 
-	lock sync.Mutex
+	lock    sync.Mutex
 	pending map[Tag]chan *Response
 }
 
 func NewIMAP() *IMAP {
-	return &IMAP{pending:make(map[Tag]chan *Response)}
+	return &IMAP{pending: make(map[Tag]chan *Response)}
 }
 
 func (imap *IMAP) Connect(hostport string) (string, os.Error) {
@@ -153,7 +160,7 @@ func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
 
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
 	if imap.protoLog != nil {
-		imap.protoLog.Printf("server<- %s...", toSend[0:min(len(command),20)])
+		imap.protoLog.Printf("server<- %s...", toSend[0:min(len(command), 20)])
 	}
 
 	if ch != nil {
@@ -192,7 +199,7 @@ func (imap *IMAP) Fetch(sequence string, fields []string, ch ResponseChan) os.Er
 	} else {
 		fieldsStr = "\"" + strings.Join(fields, " ") + "\""
 	}
-	return imap.Send(fmt.Sprintf("FETCH %s %s", sequence, fieldsStr), ch);
+	return imap.Send(fmt.Sprintf("FETCH %s %s", sequence, fieldsStr), ch)
 }
 
 func (imap *IMAP) StartLoops() {
@@ -238,8 +245,8 @@ func (imap *IMAP) ReadLoop() os.Error {
 func ParseStatus(text string) (Status, string, os.Error) {
 	// TODO: response code
 	codes := map[string]Status{
-		"OK": OK,
-		"NO": NO,
+		"OK":  OK,
+		"NO":  NO,
 		"BAD": BAD,
 	}
 	code, text := splitToken(text)
@@ -256,12 +263,12 @@ type ResponseCapabilities struct {
 }
 
 type ResponseList struct {
-	inferiors TriBool
+	inferiors  TriBool
 	selectable TriBool
-	marked TriBool
-	children TriBool
-	delim string
-	mailbox string
+	marked     TriBool
+	children   TriBool
+	delim      string
+	mailbox    string
 }
 
 type ResponseFlags struct {
@@ -278,6 +285,7 @@ type ResponseRecent struct {
 type Address struct {
 	name, source, address string
 }
+
 func (a *Address) FromSexp(s []Sexp) {
 	if name := nilOrString(s[0]); name != nil {
 		a.name = *name
@@ -307,15 +315,15 @@ func AddressListFromSexp(s Sexp) []Address {
 
 type ResponseFetchEnvelope struct {
 	date, subject, inReplyTo, messageId *string
-	from, sender, replyTo, to, cc, bcc []Address
+	from, sender, replyTo, to, cc, bcc  []Address
 }
 
 type ResponseFetch struct {
-	msg int
-	flags Sexp
-	envelope ResponseFetchEnvelope
+	msg          int
+	flags        Sexp
+	envelope     ResponseFetchEnvelope
 	internalDate string
-	size int
+	size         int
 }
 
 
@@ -349,7 +357,7 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		err = p.expectEOF()
 		check(err)
 
-		list := &ResponseList{delim:delim, mailbox:mailbox}
+		list := &ResponseList{delim: delim, mailbox: mailbox}
 		for _, flag := range flags {
 			switch flag {
 			case "\\Noinferiors":
@@ -397,10 +405,10 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 			p := newParser(text)
 			sexp, err := p.parseSexp()
 			check(err)
-			if len(sexp) % 2 != 0 {
+			if len(sexp)%2 != 0 {
 				panic("fetch sexp must have even number of items")
 			}
-			fetch := &ResponseFetch{msg:num}
+			fetch := &ResponseFetch{msg: num}
 			for i := 0; i < len(sexp); i += 2 {
 				key := sexp[i].(string)
 				switch key {
