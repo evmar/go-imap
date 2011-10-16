@@ -22,7 +22,7 @@ func check(err os.Error) {
 type Status int
 
 const (
-	OK = Status(iota)
+	OK Status = iota
 	NO
 	BAD
 )
@@ -347,11 +347,11 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		check(err)
 		p.expect(" ")
 
-		delim, err := p.parseString()
+		delim, err := p.parseQuoted()
 		check(err)
 		p.expect(" ")
 
-		mailbox, err := p.parseString()
+		mailbox, err := p.parseQuoted()
 		check(err)
 
 		err = p.expectEOF()

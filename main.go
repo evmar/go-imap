@@ -97,7 +97,7 @@ func main() {
 
 	log.Printf("%v", state.list)
 
-	err = imap.Fetch("1:4", []string{"ALL"}, ch)
+	err = imap.Fetch("1:4", []string{"RFC822.HEADER"}, ch)
 	check(err)
 	state.Await(imap, ch)
 

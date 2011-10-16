@@ -7,11 +7,23 @@ import (
 
 func TestParseBasic(t *testing.T) {
 	p := newParser("\"foo bar\"")
-	s, err := p.parseString()
+	s, err := p.parseQuoted()
 	if err != nil {
 		t.FailNow()
 	}
 	if s != "foo bar" {
+		t.FailNow()
+	}
+}
+
+func TestParseLiteral(t *testing.T) {
+	input := "({10}\r\n0123456789 abc)"
+	p := newParser(input)
+	ps, err := p.parseSexp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ps, []Sexp{"0123456789", "abc"}) {
 		t.FailNow()
 	}
 }
@@ -31,7 +43,7 @@ func TestParseSimple(t *testing.T) {
 		t.FailNow()
 	}
 
-	d, err := p.parseString()
+	d, err := p.parseQuoted()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +55,7 @@ func TestParseSimple(t *testing.T) {
 		t.FailNow()
 	}
 
-	box, err := p.parseString()
+	box, err := p.parseQuoted()
 	if err != nil {
 		t.Fatal(err)
 	}

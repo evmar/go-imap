@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 )
 
 func init() {
@@ -85,6 +86,47 @@ L:
 	return atom, nil
 }
 
+func (p *Parser) parseLiteral() (string, os.Error) {
+/*
+literal         = "{" number "}" CRLF *CHAR8
+*/
+	if !p.expect("{") {
+		return "", p.error("expected '{'")
+	}
+
+	var i int
+	for i = p.cur; i < len(p.input); i++ {
+		if p.input[i] == '}' {
+			break
+		}
+	}
+
+	lengthStr := p.input[p.cur:i]
+	p.cur = i
+
+	if !p.expect("}") {
+		return "", p.error("expected '}'")
+	}
+
+	length, err := strconv.Atoi(lengthStr)
+	if err != nil {
+		return "", err
+	}
+
+	if !p.expect("\r\n") {
+		return "", p.error("expected \r\n")
+	}
+
+	if p.cur + length > len(p.input) {
+		return "", p.error("too short")
+	}
+
+	result := p.input[p.cur:p.cur+length]
+	p.cur += length
+
+	return result, nil
+}
+
 func (p *Parser) parseSexp() ([]Sexp, os.Error) {
 	if !p.expect("(") {
 		return nil, p.error("expected '('")
@@ -103,7 +145,9 @@ L:
 		case '(':
 			exp, err = p.parseSexp()
 		case '"':
-			exp, err = p.parseString()
+			exp, err = p.parseQuoted()
+		case '{':
+			exp, err = p.parseLiteral()
 		case ')':
 			break L
 		default:
@@ -146,7 +190,7 @@ func (p *Parser) parseParenStringList() ([]string, os.Error) {
 	return strs, nil
 }
 
-func (p *Parser) parseString() (string, os.Error) {
+func (p *Parser) parseQuoted() (string, os.Error) {
 	if !p.expect("\"") {
 		return "", p.error("expected '\"'")
 	}
