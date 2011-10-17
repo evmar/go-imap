@@ -1,14 +1,27 @@
 package main
 
 import (
+	"bytes"
+	"bufio"
 	"fmt"
 	"log"
 	"os"
+	"io"
 	"strconv"
 )
 
 func init() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
+}
+
+func recoverError(err *os.Error) {
+	if e := recover(); e != nil {
+		if osErr, ok := e.(os.Error); ok {
+			*err = osErr
+			return
+		}
+		panic(e)
+	}
 }
 
 type Sexp interface{}
@@ -25,47 +38,58 @@ func nilOrString(s Sexp) *string {
 }
 
 type Parser struct {
-	input string
-	cur int
+	*bufio.Reader
 }
 
-func newParser(input string) *Parser {
-	return &Parser{input, 0}
+func newParser(r io.Reader) *Parser {
+	return &Parser{bufio.NewReader(r)}
+}
+func newParserString(s string) *Parser {
+	return newParser(bytes.NewBufferString(s))
 }
 
-func (p *Parser) error(text string) os.Error {
-	return fmt.Errorf("parse error in %q near offset %d: %s", p.input, p.cur, text)
-}
+func (p *Parser) expect(text string) os.Error {
+	buf := make([]byte, len(text))
 
-func (p *Parser) expect(text string) bool {
-	if p.cur == len(p.input) {
-		return false
+	_, err := io.ReadFull(p, buf)
+	if err != nil {
+		return err
 	}
-	if p.input[p.cur:p.cur+len(text)] != text {
-		return false
-	}
-	p.cur += len(text)
-	return true
-}
 
-func (p *Parser) expectEOF() os.Error {
-	if p.cur != len(p.input) {
-		return p.error("expected end of input")
+	if !bytes.Equal(buf, []byte(text)) {
+		return fmt.Errorf("expected %q, got %q", text, buf)
 	}
+
 	return nil
 }
 
-func (p *Parser) parseAtom() (string, os.Error) {
+func (p *Parser) expectEOF() os.Error {
+	_, err := p.ReadByte()
+	if err != nil {
+		if err == os.EOF {
+			return nil
+		}
+		return err
+	}
+	return os.NewError("expected EOF")
+}
+
+func (p *Parser) parseAtom() (outStr string, outErr os.Error) {
 /*
 ATOM-CHAR       = <any CHAR except atom-specials>
 
 atom-specials   = "(" / ")" / "{" / SP / CTL / list-wildcards /
                   quoted-specials / resp-specials
 */
-	i := p.cur
+	defer recoverError(&outErr)
+	atom := bytes.NewBuffer(make([]byte, 0, 16))
+
 L:
-	for ; i < len(p.input); i++ {
-		switch p.input[i] {
+	for {
+		c, err := p.ReadByte()
+		check(err)
+
+		switch c {
 		case '(', ')', '{', ' ',
 			// XXX: CTL
 			'%', '*',  // list-wildcards
@@ -73,105 +97,86 @@ L:
 			// XXX: note that I dropped '\' from the quoted-specials,
 			// because it conflicts with parsing flags.  Who knows.
 			// XXX: resp-specials
+			err = p.UnreadByte()
+			check(err)
 			break L
 		}
+
+		atom.WriteByte(c)
 	}
 
-	if i == p.cur {
-		return "", p.error("expected atom character")
-	}
-
-	atom := p.input[p.cur:i]
-	p.cur = i
-	return atom, nil
+	return atom.String(), nil
 }
 
-func (p *Parser) parseLiteral() (string, os.Error) {
+func (p *Parser) parseLiteral() (literal []byte, outErr os.Error) {
 /*
 literal         = "{" number "}" CRLF *CHAR8
 */
-	if !p.expect("{") {
-		return "", p.error("expected '{'")
-	}
+	defer recoverError(&outErr)
 
-	var i int
-	for i = p.cur; i < len(p.input); i++ {
-		if p.input[i] == '}' {
-			break
-		}
-	}
+	check(p.expect("{"))
 
-	lengthStr := p.input[p.cur:i]
-	p.cur = i
+	lengthBytes, err := p.ReadSlice('}')
+	check(err)
 
-	if !p.expect("}") {
-		return "", p.error("expected '}'")
-	}
+	length, err := strconv.Atoi(string(lengthBytes[0:len(lengthBytes)-1]))
+	check(err)
 
-	length, err := strconv.Atoi(lengthStr)
-	if err != nil {
-		return "", err
-	}
+	err = p.expect("\r\n")
+	check(err)
 
-	if !p.expect("\r\n") {
-		return "", p.error("expected \r\n")
-	}
+	literal = make([]byte, length)
+	_, err = io.ReadFull(p, literal)
+	check(err)
 
-	if p.cur + length > len(p.input) {
-		return "", p.error("too short")
-	}
-
-	result := p.input[p.cur:p.cur+length]
-	p.cur += length
-
-	return result, nil
+	return
 }
 
-func (p *Parser) parseSexp() ([]Sexp, os.Error) {
-	if !p.expect("(") {
-		return nil, p.error("expected '('")
-	}
+func (p *Parser) parseSexp() (sexp []Sexp, outErr os.Error) {
+	defer recoverError(&outErr)
+
+	err := p.expect("(")
+	check(err)
 
 	sexps := make([]Sexp, 0, 4)
-L:
 	for {
-		if p.cur == len(p.input) {
-			break
-		}
+		c, err := p.ReadByte()
+		check(err)
 
 		var exp Sexp
-		var err os.Error
-		switch p.input[p.cur] {
+		switch c {
+		case ')':
+			return sexps, nil
 		case '(':
+			p.UnreadByte()
 			exp, err = p.parseSexp()
 		case '"':
+			p.UnreadByte()
 			exp, err = p.parseQuoted()
 		case '{':
+			p.UnreadByte()
 			exp, err = p.parseLiteral()
-		case ')':
-			break L
 		default:
 			// TODO: may need to distinguish atom from string in practice.
+			p.UnreadByte()
 			exp, err = p.parseAtom()
 			if exp == "NIL" {
 				exp = nil
 			}
 		}
-		if err != nil {
-			return nil, err
-		}
+		check(err)
+
 		sexps = append(sexps, exp)
 
-		if !p.expect(" ") {
-			break
+		c, err = p.ReadByte()
+		check(err)
+		if c != ' ' {
+			err = p.UnreadByte()
+			check(err)
 		}
 	}
 
-	if !p.expect(")") {
-		return nil, p.error("expected ')'")
-	}
-
-	return sexps, nil
+	panic("not reached")
 }
 
 func (p *Parser) parseParenStringList() ([]string, os.Error) {
@@ -190,27 +195,29 @@ func (p *Parser) parseParenStringList() ([]string, os.Error) {
 	return strs, nil
 }
 
-func (p *Parser) parseQuoted() (string, os.Error) {
-	if !p.expect("\"") {
-		return "", p.error("expected '\"'")
-	}
-	i := p.cur
-	for ; i < len(p.input); i++ {
-		if p.input[i] == '"' {
-			break
-		}
-		if p.input[i] == '\\' {
-			i++
-			if p.input[i] != '"' && p.input[i] != '\\' {
-				return "", p.error("expected special after backslash")
+func (p *Parser) parseQuoted() (outStr string, outErr os.Error) {
+	defer recoverError(&outErr)
+
+	err := p.expect("\"")
+	check(err)
+
+	quoted := bytes.NewBuffer(make([]byte, 0, 16))
+
+	for {
+		c, err := p.ReadByte()
+		check(err)
+		switch (c) {
+		case '\\':
+			c, err = p.ReadByte()
+			check(err)
+			if c != '"' && c != '\\' {
+				return "", fmt.Errorf("backslash-escaped %c", c)
 			}
+		case '"':
+			return quoted.String(), nil
 		}
-	}
-	str := p.input[p.cur:i]
-	p.cur = i
-	if !p.expect("\"") {
-		return "", p.error("expected '\"'")
+		quoted.WriteByte(c)
 	}
 
-	return str, nil
+	panic("not reached")
 }

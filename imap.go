@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"bufio"
 	"crypto/tls"
 	"os"
@@ -342,7 +343,7 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		return &ResponseCapabilities{caps}, nil
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
-		p := newParser(text)
+		p := newParser(bytes.NewBufferString(text))
 		flags, err := p.parseParenStringList()
 		check(err)
 		p.expect(" ")
@@ -357,7 +358,7 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		err = p.expectEOF()
 		check(err)
 
-		list := &ResponseList{delim: delim, mailbox: mailbox}
+		list := &ResponseList{delim: string(delim), mailbox: string(mailbox)}
 		for _, flag := range flags {
 			switch flag {
 			case "\\Noinferiors":
@@ -379,7 +380,7 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		return list, nil
 
 	case "FLAGS":
-		p := newParser(text)
+		p := newParser(bytes.NewBufferString(text))
 		flags, err := p.parseParenStringList()
 		check(err)
 		err = p.expectEOF()
@@ -402,7 +403,7 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		case "RECENT":
 			return &ResponseRecent{num}, nil
 		case "FETCH":
-			p := newParser(text)
+			p := newParser(bytes.NewBufferString(text))
 			sexp, err := p.parseSexp()
 			check(err)
 			if len(sexp)%2 != 0 {
