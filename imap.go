@@ -146,13 +146,6 @@ func (imap *IMAP) readTag() (tag, os.Error) {
 	return Untagged, fmt.Errorf("unexpected response %q", str)
 }
 
-func min(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func (imap *IMAP) Send(ch chan *Response, format string, args ...interface{}) os.Error {
 	tag := tag(imap.nextTag)
 	imap.nextTag++
