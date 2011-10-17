@@ -26,43 +26,6 @@ func loadAuth(path string) (string, string) {
 	return string(user), string(pass)
 }
 
-type List struct {
-	name string
-	flags []string
-	exists int
-}
-
-type State struct {
-	list *List
-}
-
-func (s *State) ProcessUpdate(update interface{}) {
-	switch update := update.(type) {
-	case *ResponseExists:
-		s.list.exists = update.count
-	case *ResponseFlags:
-		s.list.flags = update.flags
-	case *ResponseRecent:
-		// ignore
-	case *ResponseFetch:
-		log.Printf("fetched message content %+v", update)
-	default:
-		log.Printf("unhandled update type %T", update)
-	}
-}
-
-func (s *State) Await(imap *IMAP, ch chan *Response) *Response {
-	for {
-		select {
-		case update := <-imap.unsolicited:
-			s.ProcessUpdate(update)
-		case response := <-ch:
-			return response
-		}
-	}
-	return nil
-}
-
 func main() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 
