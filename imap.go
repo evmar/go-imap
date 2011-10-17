@@ -60,9 +60,9 @@ func (t TriBool) String() string {
 	return "unknown"
 }
 
-type Tag int
+type tag int
 
-const Untagged = Tag(-1)
+const Untagged = tag(-1)
 
 type Response struct {
 	status Status
@@ -83,11 +83,11 @@ type IMAP struct {
 	w        io.Writer
 
 	lock    sync.Mutex
-	pending map[Tag]chan *Response
+	pending map[tag]chan *Response
 }
 
 func NewIMAP() *IMAP {
-	return &IMAP{pending: make(map[Tag]chan *Response)}
+	return &IMAP{pending: make(map[tag]chan *Response)}
 }
 
 func (imap *IMAP) Connect(hostport string) (string, os.Error) {
@@ -117,7 +117,7 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 	return text, nil
 }
 
-func (imap *IMAP) readTag() (Tag, os.Error) {
+func (imap *IMAP) readTag() (tag, os.Error) {
 	str, err := imap.r.readToken()
 	if err != nil {
 		return Untagged, err
@@ -134,7 +134,7 @@ func (imap *IMAP) readTag() (Tag, os.Error) {
 		if err != nil {
 			return Untagged, err
 		}
-		return Tag(tagnum), nil
+		return tag(tagnum), nil
 	}
 
 	return Untagged, fmt.Errorf("unexpected response %q", str)
@@ -148,7 +148,7 @@ func min(a int, b int) int {
 }
 
 func (imap *IMAP) Send(ch chan *Response, format string, args ...interface{}) os.Error {
-	tag := Tag(imap.nextTag)
+	tag := tag(imap.nextTag)
 	imap.nextTag++
 
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), fmt.Sprintf(format, args...)))
