@@ -50,13 +50,12 @@ func (r *Response) String() string {
 
 type IMAPError struct {
 	status Status
-	text string
+	text   string
 }
 
 func (e *IMAPError) String() string {
 	return fmt.Sprintf("%s %s", e.status, e.text)
 }
-
 
 const (
 	WildcardAny          = "%"
@@ -249,8 +248,10 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 			r.exists = extra.count
 		case (*ResponseRecent):
 			r.recent = extra.count
-/*		case (*Response):
-			// XXX parse tags*/
+		//case (*Response):
+		/*
+		 // XXX parse tags
+		*/
 		default:
 			imap.unsolicited <- extra
 		}
@@ -378,7 +379,7 @@ func (imap *IMAP) readStatus(statusStr string) (*Response, os.Error) {
 		 "UIDNEXT" SP nz-number / "UIDVALIDITY" SP nz-number /
 		 "UNSEEN" SP nz-number /
 		 atom [SP 1*<any TEXT-CHAR except "]">]
-		 */
+		*/
 
 		err = imap.r.expect(" ")
 		if err != nil {
