@@ -82,12 +82,12 @@ func (p *Parser) readToken() (token string, outErr os.Error) {
 }
 
 func (p *Parser) readAtom() (outStr string, outErr os.Error) {
-/*
-ATOM-CHAR       = <any CHAR except atom-specials>
+	/*
+	ATOM-CHAR       = <any CHAR except atom-specials>
 
-atom-specials   = "(" / ")" / "{" / SP / CTL / list-wildcards /
-                  quoted-specials / resp-specials
-*/
+	atom-specials   = "(" / ")" / "{" / SP / CTL / list-wildcards /
+	                  quoted-specials / resp-specials
+	*/
 	defer recoverError(&outErr)
 	atom := bytes.NewBuffer(make([]byte, 0, 16))
 
@@ -99,8 +99,8 @@ L:
 		switch c {
 		case '(', ')', '{', ' ',
 			// XXX: CTL
-			'%', '*',  // list-wildcards
-			'"':  // quoted-specials
+			'%', '*', // list-wildcards
+			'"': // quoted-specials
 			// XXX: note that I dropped '\' from the quoted-specials,
 			// because it conflicts with parsing flags.  Who knows.
 			// XXX: resp-specials
@@ -116,9 +116,9 @@ L:
 }
 
 func (p *Parser) readLiteral() (literal []byte, outErr os.Error) {
-/*
-literal         = "{" number "}" CRLF *CHAR8
-*/
+	/*
+	literal         = "{" number "}" CRLF *CHAR8
+	*/
 	defer recoverError(&outErr)
 
 	check(p.expect("{"))
@@ -126,7 +126,7 @@ literal         = "{" number "}" CRLF *CHAR8
 	lengthBytes, err := p.ReadSlice('}')
 	check(err)
 
-	length, err := strconv.Atoi(string(lengthBytes[0:len(lengthBytes)-1]))
+	length, err := strconv.Atoi(string(lengthBytes[0 : len(lengthBytes)-1]))
 	check(err)
 
 	err = p.expect("\r\n")
@@ -213,7 +213,7 @@ func (p *Parser) readQuoted() (outStr string, outErr os.Error) {
 	for {
 		c, err := p.ReadByte()
 		check(err)
-		switch (c) {
+		switch c {
 		case '\\':
 			c, err = p.ReadByte()
 			check(err)
