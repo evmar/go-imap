@@ -26,6 +26,17 @@ func loadAuth(path string) (string, string) {
 	return string(user), string(pass)
 }
 
+func readExtra(imap *IMAP) {
+	for {
+		select {
+		case msg := <-imap.unsolicited:
+			log.Printf("*** unsolicited: %T %+v", msg, msg)
+		default:
+			return
+		}
+	}
+}
+
 func main() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 
@@ -45,37 +56,30 @@ func main() {
 	log.Printf("%s", resp)
 
 	{
-		resp, lists, err := imap.List("", WildcardAny)
+		lists, err := imap.List("", WildcardAny)
 		check(err)
-		log.Printf("%s", resp)
 		for _, list := range lists {
 			log.Printf("- %s", list)
 		}
-		if len(resp.extra) > 0 {
-			log.Printf("extra %+v", resp.extra)
-		}
+		readExtra(imap)
 	}
 
 	{
 		resp, err := imap.Examine("lkml")
 		check(err)
 		log.Printf("%s", resp)
-		log.Printf("%#v", resp)
-		if len(resp.extra) > 0 {
-			log.Printf("extra %+v", resp.extra)
-		}
+		log.Printf("%+v", resp)
+		readExtra(imap)
 	}
 
 	{
-		resp, fetches, err := imap.Fetch("1:4", []string{"ALL"})
+		fetches, err := imap.Fetch("1:4", []string{"ALL"})
 		check(err)
 		log.Printf("%s", resp)
 		for _, fetch := range fetches {
 			log.Printf("%+v", fetch)
 		}
-		if len(resp.extra) > 0 {
-			log.Printf("extra %+v", resp.extra)
-		}
+		readExtra(imap)
 	}
 
 	log.Printf("done")

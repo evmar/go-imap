@@ -85,8 +85,6 @@ type tag int
 
 const Untagged = tag(-1)
 
-type ResponseChan chan *Response
-
 type IMAP struct {
 	// Client thread.
 	nextTag int
@@ -181,11 +179,21 @@ func (imap *IMAP) SendSync(format string, args ...interface{}) (*Response, os.Er
 		return nil, err
 	}
 	response := <-ch
+	if response.status != OK {
+		return nil, &IMAPError{response.status, response.text}
+	}
 	return response, nil
 }
 
-func (imap *IMAP) Auth(user string, pass string) (*Response, os.Error) {
-	return imap.SendSync("LOGIN %s %s", user, pass)
+func (imap *IMAP) Auth(user string, pass string) (string, os.Error) {
+	resp, err := imap.SendSync("LOGIN %s %s", user, pass)
+	if err != nil {
+		return "", err
+	}
+	for _, extra := range resp.extra {
+		imap.unsolicited <- extra
+	}
+	return resp.text, nil
 }
 
 func quote(in string) string {
@@ -195,28 +203,26 @@ func quote(in string) string {
 	return "\"" + in + "\""
 }
 
-func (imap *IMAP) List(reference string, name string) (*Response, []*ResponseList, os.Error) {
+func (imap *IMAP) List(reference string, name string) ([]*ResponseList, os.Error) {
 	/* Responses:  untagged responses: LIST */
 	response, err := imap.SendSync("LIST %s %s", quote(reference), quote(name))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	extras := make([]interface{}, 0)
 	lists := make([]*ResponseList, 0)
 	for _, extra := range response.extra {
 		if list, ok := extra.(*ResponseList); ok {
 			lists = append(lists, list)
 		} else {
-			extras = append(extras, extra)
+			imap.unsolicited <- extra
 		}
 	}
-	response.extra = extras
-	return response, lists, nil
+
+	return lists, nil
 }
 
 type ResponseExamine struct {
-	*Response
 	flags  []string
 	exists int
 	recent int
@@ -233,10 +239,9 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 		return nil, err
 	}
 
-	r := &ResponseExamine{Response: resp}
+	r := &ResponseExamine{}
 
-	extras := make([]interface{}, 0)
-	for _, extra := range r.extra {
+	for _, extra := range resp.extra {
 		switch extra := extra.(type) {
 		case (*ResponseFlags):
 			r.flags = extra.flags
@@ -247,14 +252,13 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 /*		case (*Response):
 			// XXX parse tags*/
 		default:
-			extras = append(extras, extra)
+			imap.unsolicited <- extra
 		}
 	}
-	r.extra = extras
 	return r, nil
 }
 
-func (imap *IMAP) Fetch(sequence string, fields []string) (*Response, []*ResponseFetch, os.Error) {
+func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.Error) {
 	var fieldsStr string
 	if len(fields) == 1 {
 		fieldsStr = fields[0]
@@ -263,20 +267,18 @@ func (imap *IMAP) Fetch(sequence string, fields []string) (*Response, []*Respons
 	}
 	resp, err := imap.SendSync("FETCH %s %s", sequence, fieldsStr)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	extras := make([]interface{}, 0)
 	lists := make([]*ResponseFetch, 0)
 	for _, extra := range resp.extra {
 		if list, ok := extra.(*ResponseFetch); ok {
 			lists = append(lists, list)
 		} else {
-			extras = append(extras, extra)
+			imap.unsolicited <- extra
 		}
 	}
-	resp.extra = extras
-	return resp, lists, nil
+	return lists, nil
 }
 
 func (imap *IMAP) StartLoops() {
