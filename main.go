@@ -71,7 +71,6 @@ func main() {
 	state := State{}
 	imap := NewIMAP()
 	imap.responseData = make(chan interface{}, 100)
-	imap.protoLog = log.New(os.Stderr, "proto ", log.Ltime)
 
 	log.Printf("connecting")
 	_, err := imap.Connect("imap.gmail.com:993")
@@ -97,7 +96,7 @@ func main() {
 
 	log.Printf("%v", state.list)
 
-	err = imap.Fetch("1:4", []string{"RFC822.HEADER"}, ch)
+	err = imap.Fetch("1:4", []string{"ALL"}, ch)
 	check(err)
 	state.Await(imap, ch)
 

@@ -74,6 +74,27 @@ func (p *Parser) expectEOF() os.Error {
 	return os.NewError("expected EOF")
 }
 
+func (p *Parser) readToken() (token string, outErr os.Error) {
+	defer recoverError(&outErr)
+
+	buf := bytes.NewBuffer(make([]byte, 0, 16))
+	for {
+		c, err := p.ReadByte()
+		check(err)
+		switch c {
+		case ' ':
+			return buf.String(), nil
+		case '\r':
+			err := p.UnreadByte()
+			check(err)
+			return buf.String(), nil
+		}
+		buf.WriteByte(c)
+	}
+
+	panic("not reached")
+}
+
 func (p *Parser) parseAtom() (outStr string, outErr os.Error) {
 /*
 ATOM-CHAR       = <any CHAR except atom-specials>
@@ -220,4 +241,26 @@ func (p *Parser) parseQuoted() (outStr string, outErr os.Error) {
 	}
 
 	panic("not reached")
+}
+
+func (p *Parser) readToEOL() (string, os.Error) {
+	line, prefix, err := p.ReadLine()
+	if err != nil {
+		return "", err
+	}
+	if prefix {
+		return "", os.NewError("got line prefix, buffer too small")
+	}
+	return string(line), nil
+}
+
+func (p *Parser) expectEOL() os.Error {
+	empty, err := p.readToEOL()
+	if err != nil {
+		return err
+	}
+	if len(empty) > 0 {
+		return os.NewError("expected EOL")
+	}
+	return nil
 }

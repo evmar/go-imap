@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"bufio"
 	"crypto/tls"
 	"os"
 	"log"
 	"strings"
 	"fmt"
-	"net/textproto"
 	"io"
 	"strconv"
 	"sync"
@@ -77,9 +74,8 @@ type IMAP struct {
 	responseData chan interface{}
 
 	// Background thread.
-	r        *textproto.Reader
+	r        *Parser
 	w        io.Writer
-	protoLog *log.Logger
 
 	lock    sync.Mutex
 	pending map[Tag]chan *Response
@@ -95,18 +91,18 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 		return "", err
 	}
 
-	imap.r = textproto.NewReader(bufio.NewReader(conn))
+	imap.r = newParser(&LoggingReader{conn})
 	imap.w = conn
 
-	tag, text, err := imap.ReadLine()
+	tag, err := imap.readTag()
 	if err != nil {
 		return "", err
 	}
 	if tag != Untagged {
-		return "", fmt.Errorf("expected untagged server hello. got %q", text)
+		return "", fmt.Errorf("expected untagged server hello. got %q", tag)
 	}
 
-	status, text, err := ParseStatus(text)
+	status, text, err := imap.readStatus("")
 	if status != OK {
 		return "", fmt.Errorf("server hello %v %q", status, text)
 	}
@@ -116,36 +112,27 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 	return text, nil
 }
 
-func splitToken(text string) (string, string) {
-	space := strings.Index(text, " ")
-	if space < 0 {
-		return text, ""
-	}
-	return text[:space], text[space+1:]
-}
-
-func (imap *IMAP) ReadLine() (Tag, string, os.Error) {
-	line, err := imap.r.ReadLine()
+func (imap *IMAP) readTag() (Tag, os.Error) {
+	str, err := imap.r.readToken()
 	if err != nil {
-		return Untagged, "", err
+		return Untagged, err
 	}
-	if imap.protoLog != nil {
-		imap.protoLog.Printf("<-server %s", line)
+	if len(str) == 0 {
+		return Untagged, os.NewError("read empty tag")
 	}
 
-	switch line[0] {
+	switch str[0] {
 	case '*':
-		return Untagged, line[2:], nil
+		return Untagged, nil
 	case 'a':
-		tagstr, text := splitToken(line)
-		tagnum, err := strconv.Atoi(tagstr[1:])
+		tagnum, err := strconv.Atoi(str[1:])
 		if err != nil {
-			return Untagged, "", err
+			return Untagged, err
 		}
-		return Tag(tagnum), text, nil
+		return Tag(tagnum), nil
 	}
 
-	return Untagged, "", fmt.Errorf("unexpected response %q", line)
+	return Untagged, fmt.Errorf("unexpected response %q", str)
 }
 
 func min(a int, b int) int {
@@ -160,9 +147,6 @@ func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
 	imap.nextTag++
 
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
-	if imap.protoLog != nil {
-		imap.protoLog.Printf("server<- %s...", toSend[0:min(len(command), 20)])
-	}
 
 	if ch != nil {
 		imap.lock.Lock()
@@ -212,20 +196,19 @@ func (imap *IMAP) StartLoops() {
 
 func (imap *IMAP) ReadLoop() os.Error {
 	for {
-		tag, text, err := imap.ReadLine()
+		tag, err := imap.readTag()
 		if err != nil {
 			return err
 		}
-		text = text
 
 		if tag == Untagged {
-			resp, err := ParseResponse(text)
+			resp, err := imap.readUntagged()
 			if err != nil {
 				return err
 			}
 			imap.responseData <- resp
 		} else {
-			status, text, err := ParseStatus(text)
+			status, text, err := imap.readStatus("")
 			if err != nil {
 				return err
 			}
@@ -243,20 +226,33 @@ func (imap *IMAP) ReadLoop() os.Error {
 	return nil
 }
 
-func ParseStatus(text string) (Status, string, os.Error) {
+func (imap *IMAP) readStatus(code string) (Status, string, os.Error) {
+	if len(code) == 0 {
+		var err os.Error
+		code, err = imap.r.readToken()
+		if err != nil {
+			return BAD, "", err
+		}
+	}
+
 	// TODO: response code
 	codes := map[string]Status{
 		"OK":  OK,
 		"NO":  NO,
 		"BAD": BAD,
 	}
-	code, text := splitToken(text)
 
 	status, known := codes[code]
 	if !known {
 		return BAD, "", fmt.Errorf("unexpected status %q", code)
 	}
-	return status, text, nil
+
+	rest, err := imap.r.readToEOL()
+	if err != nil {
+		return BAD, "", err
+	}
+
+	return status, rest, nil
 }
 
 type ResponseCapabilities struct {
@@ -327,36 +323,56 @@ type ResponseFetch struct {
 	size         int
 }
 
+func splitToken(text string) (string, string) {
+    space := strings.Index(text, " ")
+    if space < 0 {
+        return text, ""
+    }
+    return text[:space], text[space+1:]
+}
 
-func ParseResponse(origtext string) (resp interface{}, err os.Error) {
+func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	defer func() {
 		if e := recover(); e != nil {
-			resp = nil
-			err = e.(os.Error)
+			if osErr, ok := e.(os.Error); ok {
+				outErr = osErr
+				return
+			}
+			panic(e)
 		}
 	}()
 
-	command, text := splitToken(origtext)
+	command, err := imap.r.readToken()
+	check(err)
+
 	switch command {
 	case "CAPABILITY":
-		caps := strings.Split(text, " ")
+		caps := make([]string, 0)
+		for {
+			cap, err := imap.r.readToken()
+			check(err)
+			if len(cap) == 0 {
+				break
+			}
+			caps = append(caps, cap)
+		}
+		check(imap.r.expectEOL())
 		return &ResponseCapabilities{caps}, nil
+
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
-		p := newParser(bytes.NewBufferString(text))
-		flags, err := p.parseParenStringList()
+		flags, err := imap.r.parseParenStringList()
 		check(err)
-		p.expect(" ")
+		imap.r.expect(" ")
 
-		delim, err := p.parseQuoted()
+		delim, err := imap.r.parseQuoted()
 		check(err)
-		p.expect(" ")
+		imap.r.expect(" ")
 
-		mailbox, err := p.parseQuoted()
+		mailbox, err := imap.r.parseQuoted()
 		check(err)
 
-		err = p.expectEOF()
-		check(err)
+		check(imap.r.expectEOL())
 
 		list := &ResponseList{delim: string(delim), mailbox: string(mailbox)}
 		for _, flag := range flags {
@@ -380,31 +396,33 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 		return list, nil
 
 	case "FLAGS":
-		p := newParser(bytes.NewBufferString(text))
-		flags, err := p.parseParenStringList()
+		flags, err := imap.r.parseParenStringList()
 		check(err)
-		err = p.expectEOF()
-		check(err)
+
+		check(imap.r.expectEOL())
 
 		return &ResponseFlags{flags}, nil
 
 	case "OK", "NO", "BAD":
-		status, text, err := ParseStatus(origtext)
+		status, text, err := imap.readStatus(command)
 		check(err)
 		return &Response{status, text}, nil
 	}
 
 	num, err := strconv.Atoi(command)
 	if err == nil {
-		command, text := splitToken(text)
+		command, err := imap.r.readToken()
+		check(err)
+
 		switch command {
 		case "EXISTS":
+			check(imap.r.expectEOL())
 			return &ResponseExists{num}, nil
 		case "RECENT":
+			check(imap.r.expectEOL())
 			return &ResponseRecent{num}, nil
 		case "FETCH":
-			p := newParser(bytes.NewBufferString(text))
-			sexp, err := p.parseSexp()
+			sexp, err := imap.r.parseSexp()
 			check(err)
 			if len(sexp)%2 != 0 {
 				panic("fetch sexp must have even number of items")
@@ -440,12 +458,13 @@ func ParseResponse(origtext string) (resp interface{}, err os.Error) {
 						return nil, err
 					}
 				default:
-					panic(fmt.Sprintf("%#v", key))
+					panic(fmt.Sprintf("unhandled key %#v", key))
 				}
 			}
+			check(imap.r.expectEOL())
 			return fetch, nil
 		}
 	}
 
-	return nil, fmt.Errorf("unhandled untagged response %s", text)
+	return nil, fmt.Errorf("unhandled untagged response %s", command)
 }
