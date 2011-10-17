@@ -436,6 +436,43 @@ func (imap *IMAP) readCAPABILITY() *ResponseCapabilities {
 	return &ResponseCapabilities{caps}
 }
 
+func (imap *IMAP) readLIST() *ResponseList {
+	// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
+	flags, err := imap.r.readParenStringList()
+	check(err)
+	imap.r.expect(" ")
+
+	delim, err := imap.r.readQuoted()
+	check(err)
+	imap.r.expect(" ")
+
+	mailbox, err := imap.r.readQuoted()
+	check(err)
+
+	check(imap.r.expectEOL())
+
+	list := &ResponseList{delim: string(delim), mailbox: string(mailbox)}
+	for _, flag := range flags {
+		switch flag {
+		case "\\Noinferiors":
+			list.inferiors = TriFalse
+		case "\\Noselect":
+			list.selectable = TriFalse
+		case "\\Marked":
+			list.marked = TriTrue
+		case "\\Unmarked":
+			list.marked = TriFalse
+		case "\\HasChildren":
+			list.children = TriTrue
+		case "\\HasNoChildren":
+			list.children = TriFalse
+		default:
+			panic(fmt.Sprintf("unknown list flag %q", flag))
+		}
+	}
+	return list
+}
+
 func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -453,42 +490,8 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	switch command {
 	case "CAPABILITY":
 		return imap.readCAPABILITY(), nil
-
 	case "LIST":
-		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
-		flags, err := imap.r.readParenStringList()
-		check(err)
-		imap.r.expect(" ")
-
-		delim, err := imap.r.readQuoted()
-		check(err)
-		imap.r.expect(" ")
-
-		mailbox, err := imap.r.readQuoted()
-		check(err)
-
-		check(imap.r.expectEOL())
-
-		list := &ResponseList{delim: string(delim), mailbox: string(mailbox)}
-		for _, flag := range flags {
-			switch flag {
-			case "\\Noinferiors":
-				list.inferiors = TriFalse
-			case "\\Noselect":
-				list.selectable = TriFalse
-			case "\\Marked":
-				list.marked = TriTrue
-			case "\\Unmarked":
-				list.marked = TriFalse
-			case "\\HasChildren":
-				list.children = TriTrue
-			case "\\HasNoChildren":
-				list.children = TriFalse
-			default:
-				return nil, fmt.Errorf("unknown list flag %q", flag)
-			}
-		}
-		return list, nil
+		return imap.readLIST(), nil
 
 	case "FLAGS":
 		flags, err := imap.r.readParenStringList()
