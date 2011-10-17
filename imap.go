@@ -184,11 +184,32 @@ func quote(in string) string {
 	return "\"" + in + "\""
 }
 
-func (imap *IMAP) List(reference string, name string, ch ResponseChan) os.Error {
-	return imap.Send(ch, "LIST %s %s", quote(reference), quote(name))
+func (imap *IMAP) List(reference string, name string) (*Response, []*ResponseList, os.Error) {
+	/* Responses:  untagged responses: LIST */
+	response, err := imap.SendSync("LIST %s %s", quote(reference), quote(name))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	extras := make([]interface{}, 0)
+	lists := make([]*ResponseList, 0)
+	for _, extra := range response.extra {
+		if list, ok := extra.(*ResponseList); ok {
+			lists = append(lists, list)
+		} else {
+			extras = append(extras, extra)
+		}
+	}
+	response.extra = extras
+	return response, lists, nil
 }
 
 func (imap *IMAP) Examine(mailbox string, ch ResponseChan) os.Error {
+	/*
+	 Responses:  REQUIRED untagged responses: FLAGS, EXISTS, RECENT
+	 REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS,
+	 UIDNEXT, UIDVALIDITY
+	 */
 	return imap.Send(ch, "EXAMINE %s", quote(mailbox))
 }
 
@@ -249,7 +270,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			imap.pending[tag] = nil, false
 			imap.lock.Unlock()
 
-			ch <- &Response{status, text, untagged}
+			ch <- &Response{status:status, text:text, extra:untagged}
 			untagged = nil
 		}
 	}

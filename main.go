@@ -82,11 +82,10 @@ func main() {
 	check(err)
 	log.Printf("%#v", resp)
 
-/*
-	err = imap.List("", WildcardAny, ch)
+	resp, lists, err := imap.List("", WildcardAny)
 	check(err)
-	log.Printf("%v", <-ch)
-*/
+	log.Printf("resp %#v", resp)
+	log.Printf("lists %#v", lists)
 
 	ch := make(chan *Response, 1)
 
