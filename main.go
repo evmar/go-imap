@@ -54,7 +54,7 @@ func (s *State) ProcessUpdate(update interface{}) {
 func (s *State) Await(imap *IMAP, ch chan *Response) *Response {
 	for {
 		select {
-		case update := <-imap.responseData:
+		case update := <-imap.unsolicited:
 			s.ProcessUpdate(update)
 		case response := <-ch:
 			return response
@@ -70,7 +70,7 @@ func main() {
 
 	state := State{}
 	imap := NewIMAP()
-	imap.responseData = make(chan interface{}, 100)
+	imap.unsolicited = make(chan interface{}, 100)
 
 	log.Printf("connecting")
 	hello, err := imap.Connect("imap.gmail.com:993")

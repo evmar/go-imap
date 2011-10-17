@@ -11,6 +11,10 @@ import (
 	"sync"
 )
 
+func init() {
+	log.SetFlags(log.Ltime | log.Lshortfile)
+}
+
 func check(err os.Error) {
 	if err != nil {
 		panic(err)
@@ -63,6 +67,7 @@ const Untagged = Tag(-1)
 type Response struct {
 	status Status
 	text   string
+	extra  []interface{}
 }
 
 type ResponseChan chan *Response
@@ -71,7 +76,7 @@ type IMAP struct {
 	// Client thread.
 	nextTag int
 
-	responseData chan interface{}
+	unsolicited chan interface{}
 
 	// Background thread.
 	r        *Parser
@@ -195,6 +200,7 @@ func (imap *IMAP) StartLoops() {
 }
 
 func (imap *IMAP) ReadLoop() os.Error {
+	var untagged []interface{}
 	for {
 		tag, err := imap.readTag()
 		if err != nil {
@@ -206,7 +212,22 @@ func (imap *IMAP) ReadLoop() os.Error {
 			if err != nil {
 				return err
 			}
-			imap.responseData <- resp
+
+			if untagged == nil {
+				imap.lock.Lock()
+				hasPending := len(imap.pending) > 0
+				imap.lock.Unlock()
+
+				if hasPending {
+					untagged = make([]interface{}, 0, 1)
+				}
+			}
+
+			if untagged != nil {
+				untagged = append(untagged, resp)
+			} else {
+				imap.unsolicited <- resp
+			}
 		} else {
 			status, text, err := imap.readStatus("")
 			if err != nil {
@@ -218,12 +239,12 @@ func (imap *IMAP) ReadLoop() os.Error {
 			imap.pending[tag] = nil, false
 			imap.lock.Unlock()
 
-			if ch != nil {
-				ch <- &Response{status, text}
-			}
+			ch <- &Response{status, text, untagged}
+			untagged = nil
 		}
 	}
-	return nil
+
+	panic("not reached")
 }
 
 func (imap *IMAP) readStatus(code string) (Status, string, os.Error) {
@@ -406,7 +427,7 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	case "OK", "NO", "BAD":
 		status, text, err := imap.readStatus(command)
 		check(err)
-		return &Response{status, text}, nil
+		return &Response{status, text, nil}, nil
 	}
 
 	num, err := strconv.Atoi(command)
@@ -433,7 +454,6 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 				switch key {
 				case "ENVELOPE":
 					env := sexp[i+1].([]Sexp)
-					log.Printf("env %+v", env)
 					// This format is insane.
 					if len(env) != 10 {
 						return nil, fmt.Errorf("envelope needed 10 fields, had %d", len(env))
