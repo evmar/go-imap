@@ -77,18 +77,18 @@ func main() {
 	check(err)
 	log.Printf("server hello: %s", hello)
 
-	ch := make(chan *Response, 1)
-
 	log.Printf("logging in")
-	err = imap.Auth(user, pass, ch)
+	resp, err := imap.Auth(user, pass)
 	check(err)
-	state.Await(imap, ch)
+	log.Printf("%#v", resp)
 
 /*
 	err = imap.List("", WildcardAny, ch)
 	check(err)
 	log.Printf("%v", <-ch)
 */
+
+	ch := make(chan *Response, 1)
 
 	err = imap.Examine("lkml", ch)
 	check(err)

@@ -147,11 +147,11 @@ func min(a int, b int) int {
 	return b
 }
 
-func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
+func (imap *IMAP) Send(ch chan *Response, format string, args ...interface{}) os.Error {
 	tag := Tag(imap.nextTag)
 	imap.nextTag++
 
-	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), command))
+	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), fmt.Sprintf(format, args...)))
 
 	if ch != nil {
 		imap.lock.Lock()
@@ -163,8 +163,18 @@ func (imap *IMAP) Send(command string, ch chan *Response) os.Error {
 	return err
 }
 
-func (imap *IMAP) Auth(user string, pass string, ch ResponseChan) os.Error {
-	return imap.Send(fmt.Sprintf("LOGIN %s %s", user, pass), ch)
+func (imap *IMAP) SendSync(format string, args ...interface{}) (*Response, os.Error) {
+	ch := make(chan *Response, 1)
+	err := imap.Send(ch, format, args...)
+	if err != nil {
+		return nil, err
+	}
+	response := <-ch
+	return response, nil
+}
+
+func (imap *IMAP) Auth(user string, pass string) (*Response, os.Error) {
+	return imap.SendSync("LOGIN %s %s", user, pass)
 }
 
 func quote(in string) string {
@@ -175,11 +185,11 @@ func quote(in string) string {
 }
 
 func (imap *IMAP) List(reference string, name string, ch ResponseChan) os.Error {
-	return imap.Send(fmt.Sprintf("LIST %s %s", quote(reference), quote(name)), ch)
+	return imap.Send(ch, "LIST %s %s", quote(reference), quote(name))
 }
 
 func (imap *IMAP) Examine(mailbox string, ch ResponseChan) os.Error {
-	return imap.Send(fmt.Sprintf("EXAMINE %s", quote(mailbox)), ch)
+	return imap.Send(ch, "EXAMINE %s", quote(mailbox))
 }
 
 func (imap *IMAP) Fetch(sequence string, fields []string, ch ResponseChan) os.Error {
@@ -189,7 +199,7 @@ func (imap *IMAP) Fetch(sequence string, fields []string, ch ResponseChan) os.Er
 	} else {
 		fieldsStr = "\"" + strings.Join(fields, " ") + "\""
 	}
-	return imap.Send(fmt.Sprintf("FETCH %s %s", sequence, fieldsStr), ch)
+	return imap.Send(ch, "FETCH %s %s", sequence, fieldsStr)
 }
 
 func (imap *IMAP) StartLoops() {
