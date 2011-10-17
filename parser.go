@@ -60,6 +60,10 @@ func (p *Parser) expect(text string) os.Error {
 	return nil
 }
 
+func (p *Parser) expectEOL() os.Error {
+	return p.expect("\r\n")
+}
+
 func (p *Parser) readToken() (token string, outErr os.Error) {
 	defer recoverError(&outErr)
 
@@ -91,7 +95,6 @@ func (p *Parser) readAtom() (outStr string, outErr os.Error) {
 	defer recoverError(&outErr)
 	atom := bytes.NewBuffer(make([]byte, 0, 16))
 
-L:
 	for {
 		c, err := p.ReadByte()
 		check(err)
@@ -106,13 +109,40 @@ L:
 			// XXX: resp-specials
 			err = p.UnreadByte()
 			check(err)
-			break L
+			return atom.String(), nil
 		}
 
 		atom.WriteByte(c)
 	}
 
-	return atom.String(), nil
+	panic("not reached")
+}
+
+func (p *Parser) readQuoted() (outStr string, outErr os.Error) {
+	defer recoverError(&outErr)
+
+	err := p.expect("\"")
+	check(err)
+
+	quoted := bytes.NewBuffer(make([]byte, 0, 16))
+
+	for {
+		c, err := p.ReadByte()
+		check(err)
+		switch c {
+		case '\\':
+			c, err = p.ReadByte()
+			check(err)
+			if c != '"' && c != '\\' {
+				return "", fmt.Errorf("backslash-escaped %c", c)
+			}
+		case '"':
+			return quoted.String(), nil
+		}
+		quoted.WriteByte(c)
+	}
+
+	panic("not reached")
 }
 
 func (p *Parser) readLiteral() (literal []byte, outErr os.Error) {
@@ -202,33 +232,6 @@ func (p *Parser) readParenStringList() ([]string, os.Error) {
 	return strs, nil
 }
 
-func (p *Parser) readQuoted() (outStr string, outErr os.Error) {
-	defer recoverError(&outErr)
-
-	err := p.expect("\"")
-	check(err)
-
-	quoted := bytes.NewBuffer(make([]byte, 0, 16))
-
-	for {
-		c, err := p.ReadByte()
-		check(err)
-		switch c {
-		case '\\':
-			c, err = p.ReadByte()
-			check(err)
-			if c != '"' && c != '\\' {
-				return "", fmt.Errorf("backslash-escaped %c", c)
-			}
-		case '"':
-			return quoted.String(), nil
-		}
-		quoted.WriteByte(c)
-	}
-
-	panic("not reached")
-}
-
 func (p *Parser) readToEOL() (string, os.Error) {
 	line, prefix, err := p.ReadLine()
 	if err != nil {
@@ -238,15 +241,4 @@ func (p *Parser) readToEOL() (string, os.Error) {
 		return "", os.NewError("got line prefix, buffer too small")
 	}
 	return string(line), nil
-}
-
-func (p *Parser) expectEOL() os.Error {
-	empty, err := p.readToEOL()
-	if err != nil {
-		return err
-	}
-	if len(empty) > 0 {
-		return os.NewError("expected EOL")
-	}
-	return nil
 }
