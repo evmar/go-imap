@@ -422,14 +422,6 @@ type ResponseFetch struct {
 	size         int
 }
 
-func splitToken(text string) (string, string) {
-    space := strings.Index(text, " ")
-    if space < 0 {
-        return text, ""
-    }
-    return text[:space], text[space+1:]
-}
-
 func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	defer func() {
 		if e := recover(); e != nil {
