@@ -88,7 +88,7 @@ type IMAP struct {
 	// Client thread.
 	nextTag int
 
-	unsolicited chan interface{}
+	Unsolicited chan interface{}
 
 	// Background thread.
 	r *Parser
@@ -190,7 +190,7 @@ func (imap *IMAP) Auth(user string, pass string) (string, os.Error) {
 		return "", err
 	}
 	for _, extra := range resp.extra {
-		imap.unsolicited <- extra
+		imap.Unsolicited <- extra
 	}
 	return resp.text, nil
 }
@@ -214,7 +214,7 @@ func (imap *IMAP) List(reference string, name string) ([]*ResponseList, os.Error
 		if list, ok := extra.(*ResponseList); ok {
 			lists = append(lists, list)
 		} else {
-			imap.unsolicited <- extra
+			imap.Unsolicited <- extra
 		}
 	}
 
@@ -253,7 +253,7 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 		 // XXX parse tags
 		*/
 		default:
-			imap.unsolicited <- extra
+			imap.Unsolicited <- extra
 		}
 	}
 	return r, nil
@@ -276,7 +276,7 @@ func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.
 		if list, ok := extra.(*ResponseFetch); ok {
 			lists = append(lists, list)
 		} else {
-			imap.unsolicited <- extra
+			imap.Unsolicited <- extra
 		}
 	}
 	return lists, nil
@@ -316,7 +316,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			if untagged != nil {
 				untagged = append(untagged, resp)
 			} else {
-				imap.unsolicited <- resp
+				imap.Unsolicited <- resp
 			}
 		} else {
 			resp, err := imap.readStatus("")
@@ -456,12 +456,12 @@ type ResponseFetchEnvelope struct {
 }
 
 type ResponseFetch struct {
-	msg          int
-	flags        Sexp
-	envelope     ResponseFetchEnvelope
-	internalDate string
-	size         int
-	rfc822, rfc822Header []byte
+	Msg          int
+	Flags        Sexp
+	Envelope     ResponseFetchEnvelope
+	InternalDate string
+	Size         int
+	Rfc822, Rfc822Header []byte
 }
 
 func (imap *IMAP) readCAPABILITY() *ResponseCapabilities {
@@ -528,7 +528,7 @@ func (imap *IMAP) readFETCH(num int) *ResponseFetch {
 	if len(sexp)%2 != 0 {
 		panic("fetch sexp must have even number of items")
 	}
-	fetch := &ResponseFetch{msg: num}
+	fetch := &ResponseFetch{Msg: num}
 	for i := 0; i < len(sexp); i += 2 {
 		key := sexp[i].(string)
 		switch key {
@@ -538,26 +538,26 @@ func (imap *IMAP) readFETCH(num int) *ResponseFetch {
 			if len(env) != 10 {
 				panic(fmt.Sprintf("envelope needed 10 fields, had %d", len(env)))
 			}
-			fetch.envelope.date = nilOrString(env[0])
-			fetch.envelope.subject = nilOrString(env[1])
-			fetch.envelope.from = AddressListFromSexp(env[2])
-			fetch.envelope.sender = AddressListFromSexp(env[3])
-			fetch.envelope.replyTo = AddressListFromSexp(env[4])
-			fetch.envelope.to = AddressListFromSexp(env[5])
-			fetch.envelope.cc = AddressListFromSexp(env[6])
-			fetch.envelope.bcc = AddressListFromSexp(env[7])
-			fetch.envelope.inReplyTo = nilOrString(env[8])
-			fetch.envelope.messageId = nilOrString(env[9])
+			fetch.Envelope.date = nilOrString(env[0])
+			fetch.Envelope.subject = nilOrString(env[1])
+			fetch.Envelope.from = AddressListFromSexp(env[2])
+			fetch.Envelope.sender = AddressListFromSexp(env[3])
+			fetch.Envelope.replyTo = AddressListFromSexp(env[4])
+			fetch.Envelope.to = AddressListFromSexp(env[5])
+			fetch.Envelope.cc = AddressListFromSexp(env[6])
+			fetch.Envelope.bcc = AddressListFromSexp(env[7])
+			fetch.Envelope.inReplyTo = nilOrString(env[8])
+			fetch.Envelope.messageId = nilOrString(env[9])
 		case "FLAGS":
-			fetch.flags = sexp[i+1]
+			fetch.Flags = sexp[i+1]
 		case "INTERNALDATE":
-			fetch.internalDate = sexp[i+1].(string)
+			fetch.InternalDate = sexp[i+1].(string)
 		case "RFC822":
-			fetch.rfc822 = sexp[i+1].([]byte)
+			fetch.Rfc822 = sexp[i+1].([]byte)
 		case "RFC822.HEADER":
-			fetch.rfc822Header = sexp[i+1].([]byte)
+			fetch.Rfc822Header = sexp[i+1].([]byte)
 		case "RFC822.SIZE":
-			fetch.size, err = strconv.Atoi(sexp[i+1].(string))
+			fetch.Size, err = strconv.Atoi(sexp[i+1].(string))
 			check(err)
 		default:
 			panic(fmt.Sprintf("unhandled fetch key %#v", key))

@@ -3,8 +3,15 @@ package main
 import (
 	"os"
 	"bufio"
+	"imap"
 	"log"
 )
+
+func check(err os.Error) {
+	if err != nil {
+		panic(err)
+	}
+}
 
 func loadAuth(path string) (string, string) {
 	f, err := os.Open(path)
@@ -26,10 +33,10 @@ func loadAuth(path string) (string, string) {
 	return string(user), string(pass)
 }
 
-func readExtra(imap *IMAP) {
+func readExtra(im *imap.IMAP) {
 	for {
 		select {
-		case msg := <-imap.unsolicited:
+		case msg := <-im.Unsolicited:
 			log.Printf("*** unsolicited: %T %+v", msg, msg)
 		default:
 			return
@@ -42,49 +49,49 @@ func main() {
 
 	user, pass := loadAuth("auth")
 
-	imap := NewIMAP()
-	imap.unsolicited = make(chan interface{}, 100)
+	im := imap.NewIMAP()
+	im.Unsolicited = make(chan interface{}, 100)
 
 	log.Printf("connecting")
-	hello, err := imap.Connect("imap.gmail.com:993")
+	hello, err := im.Connect("imap.gmail.com:993")
 	check(err)
 	log.Printf("server hello: %s", hello)
 
 	log.Printf("logging in")
-	resp, err := imap.Auth(user, pass)
+	resp, err := im.Auth(user, pass)
 	check(err)
 	log.Printf("%s", resp)
 
 	{
-		lists, err := imap.List("", WildcardAny)
+		lists, err := im.List("", imap.WildcardAny)
 		check(err)
 		for _, list := range lists {
 			log.Printf("- %s", list)
 		}
-		readExtra(imap)
+		readExtra(im)
 	}
 
 	{
-		resp, err := imap.Examine("INBOX")
+		resp, err := im.Examine("INBOX")
 		check(err)
 		log.Printf("%s", resp)
 		log.Printf("%+v", resp)
-		readExtra(imap)
+		readExtra(im)
 	}
 
 	mbox, err := os.Create("mbox")
 	check(err)
 
 	{
-		fetches, err := imap.Fetch("1:4", []string{"RFC822"})
+		fetches, err := im.Fetch("1:4", []string{"RFC822"})
 		check(err)
 		log.Printf("%s", resp)
 		for _, fetch := range fetches {
 			mbox.Write([]byte("From whatever\r\n"))
-			mbox.Write(fetch.rfc822)
+			mbox.Write(fetch.Rfc822)
 			mbox.Write([]byte("\r\n"))
 		}
-		readExtra(imap)
+		readExtra(im)
 	}
 
 	log.Printf("done")
