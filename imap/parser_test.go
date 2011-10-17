@@ -1,11 +1,11 @@
-package main
+package imap
 
 import (
 	"bytes"
+	"fmt"
+	"os"
 	"reflect"
 	"testing"
-	"os"
-	"fmt"
 )
 
 func testError(t *testing.T, err os.Error, format string, args ...interface{}) {

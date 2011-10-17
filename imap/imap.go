@@ -1,13 +1,13 @@
-package main
+package imap
 
 import (
 	"crypto/tls"
-	"os"
-	"log"
-	"strings"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 

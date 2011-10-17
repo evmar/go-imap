@@ -1,12 +1,12 @@
-package main
+package imap
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
-	"io"
 	"strconv"
 )
 

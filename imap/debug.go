@@ -1,9 +1,9 @@
-package main
+package imap
 
 import (
 	"io"
-	"os"
 	"log"
+	"os"
 )
 
 var logger *log.Logger
