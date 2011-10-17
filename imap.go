@@ -101,7 +101,7 @@ func (imap *IMAP) Connect(hostport string) (*Response, os.Error) {
 		return nil, err
 	}
 
-	imap.r = newParser(conn) //&LoggingReader{conn})
+	imap.r = newParser(&LoggingReader{conn})
 	imap.w = conn
 
 	tag, err := imap.readTag()
@@ -232,6 +232,8 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 			r.exists = extra.count
 		case (*ResponseRecent):
 			r.recent = extra.count
+/*		case (*Response):
+			// XXX parse tags*/
 		default:
 			extras = append(extras, extra)
 		}
@@ -351,6 +353,19 @@ func (imap *IMAP) readStatus(statusStr string) (*Response, os.Error) {
 		if err != nil {
 			return nil, err
 		}
+
+		/*
+		 resp-text-code  = "ALERT" /
+		 "BADCHARSET" [SP "(" astring *(SP astring) ")" ] /
+		 capability-data / "PARSE" /
+		 "PERMANENTFLAGS" SP "("
+		 [flag-perm *(SP flag-perm)] ")" /
+		 "READ-ONLY" / "READ-WRITE" / "TRYCREATE" /
+		 "UIDNEXT" SP nz-number / "UIDVALIDITY" SP nz-number /
+		 "UNSEEN" SP nz-number /
+		 atom [SP 1*<any TEXT-CHAR except "]">]
+		 */
+
 		err = imap.r.expect(" ")
 		if err != nil {
 			return nil, err
