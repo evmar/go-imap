@@ -68,7 +68,6 @@ func main() {
 
 	user, pass := loadAuth("auth")
 
-	state := State{}
 	imap := NewIMAP()
 	imap.unsolicited = make(chan interface{}, 100)
 
@@ -82,12 +81,15 @@ func main() {
 	check(err)
 	log.Printf("%s", resp)
 
-	if false {
+	{
 		resp, lists, err := imap.List("", WildcardAny)
 		check(err)
 		log.Printf("%s", resp)
 		for _, list := range lists {
 			log.Printf("- %s", list)
+		}
+		if len(resp.extra) > 0 {
+			log.Printf("extra %+v", resp.extra)
 		}
 	}
 
@@ -96,14 +98,20 @@ func main() {
 		check(err)
 		log.Printf("%s", resp)
 		log.Printf("%#v", resp)
-		log.Printf("%+v", resp.extra)
+		if len(resp.extra) > 0 {
+			log.Printf("extra %+v", resp.extra)
+		}
 	}
 
-	ch := make(chan *Response, 1)
-
-	err = imap.Fetch("1:4", []string{"ALL"}, ch)
-	check(err)
-	state.Await(imap, ch)
+	{
+		resp, fetches, err := imap.Fetch("1:4", []string{"ALL"})
+		check(err)
+		log.Printf("%s", resp)
+		log.Printf("%+v", fetches)
+		if len(resp.extra) > 0 {
+			log.Printf("extra %+v", resp.extra)
+		}
+	}
 
 	log.Printf("done")
 }

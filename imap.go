@@ -245,14 +245,29 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 	return r, nil
 }
 
-func (imap *IMAP) Fetch(sequence string, fields []string, ch ResponseChan) os.Error {
+func (imap *IMAP) Fetch(sequence string, fields []string) (*Response, []*ResponseFetch, os.Error) {
 	var fieldsStr string
 	if len(fields) == 1 {
 		fieldsStr = fields[0]
 	} else {
 		fieldsStr = "\"" + strings.Join(fields, " ") + "\""
 	}
-	return imap.Send(ch, "FETCH %s %s", sequence, fieldsStr)
+	resp, err := imap.SendSync("FETCH %s %s", sequence, fieldsStr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	extras := make([]interface{}, 0)
+	lists := make([]*ResponseFetch, 0)
+	for _, extra := range resp.extra {
+		if list, ok := extra.(*ResponseFetch); ok {
+			lists = append(lists, list)
+		} else {
+			extras = append(extras, extra)
+		}
+	}
+	resp.extra = extras
+	return resp, lists, nil
 }
 
 func (imap *IMAP) StartLoops() {
