@@ -70,6 +70,10 @@ type Response struct {
 	extra  []interface{}
 }
 
+func (r *Response) String() string {
+	return fmt.Sprintf("%s %s", r.status, r.text)
+}
+
 type ResponseChan chan *Response
 
 type IMAP struct {
@@ -96,7 +100,7 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 		return "", err
 	}
 
-	imap.r = newParser(&LoggingReader{conn})
+	imap.r = newParser(conn)//&LoggingReader{conn})
 	imap.w = conn
 
 	tag, err := imap.readTag()
@@ -204,7 +208,7 @@ func (imap *IMAP) List(reference string, name string) (*Response, []*ResponseLis
 	return response, lists, nil
 }
 
-func (imap *IMAP) Examine(mailbox string, ch ResponseChan) os.Error {
+func (imap *IMAP) Examine(mailbox string) os.Error {
 	/*
 	 Responses:  REQUIRED untagged responses: FLAGS, EXISTS, RECENT
 	 REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS,

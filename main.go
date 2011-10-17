@@ -80,12 +80,14 @@ func main() {
 	log.Printf("logging in")
 	resp, err := imap.Auth(user, pass)
 	check(err)
-	log.Printf("%#v", resp)
+	log.Printf("%s", resp)
 
 	resp, lists, err := imap.List("", WildcardAny)
 	check(err)
-	log.Printf("resp %#v", resp)
-	log.Printf("lists %#v", lists)
+	log.Printf("%s", resp)
+	for _, list := range lists {
+		log.Printf("- %s", list)
+	}
 
 	ch := make(chan *Response, 1)
 
