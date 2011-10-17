@@ -81,7 +81,7 @@ func (p *Parser) readToken() (token string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *Parser) parseAtom() (outStr string, outErr os.Error) {
+func (p *Parser) readAtom() (outStr string, outErr os.Error) {
 /*
 ATOM-CHAR       = <any CHAR except atom-specials>
 
@@ -115,7 +115,7 @@ L:
 	return atom.String(), nil
 }
 
-func (p *Parser) parseLiteral() (literal []byte, outErr os.Error) {
+func (p *Parser) readLiteral() (literal []byte, outErr os.Error) {
 /*
 literal         = "{" number "}" CRLF *CHAR8
 */
@@ -139,7 +139,7 @@ literal         = "{" number "}" CRLF *CHAR8
 	return
 }
 
-func (p *Parser) parseSexp() (sexp []Sexp, outErr os.Error) {
+func (p *Parser) readSexp() (sexp []Sexp, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("(")
@@ -156,17 +156,17 @@ func (p *Parser) parseSexp() (sexp []Sexp, outErr os.Error) {
 			return sexps, nil
 		case '(':
 			p.UnreadByte()
-			exp, err = p.parseSexp()
+			exp, err = p.readSexp()
 		case '"':
 			p.UnreadByte()
-			exp, err = p.parseQuoted()
+			exp, err = p.readQuoted()
 		case '{':
 			p.UnreadByte()
-			exp, err = p.parseLiteral()
+			exp, err = p.readLiteral()
 		default:
 			// TODO: may need to distinguish atom from string in practice.
 			p.UnreadByte()
-			exp, err = p.parseAtom()
+			exp, err = p.readAtom()
 			if exp == "NIL" {
 				exp = nil
 			}
@@ -186,8 +186,8 @@ func (p *Parser) parseSexp() (sexp []Sexp, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *Parser) parseParenStringList() ([]string, os.Error) {
-	sexp, err := p.parseSexp()
+func (p *Parser) readParenStringList() ([]string, os.Error) {
+	sexp, err := p.readSexp()
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (p *Parser) parseParenStringList() ([]string, os.Error) {
 	return strs, nil
 }
 
-func (p *Parser) parseQuoted() (outStr string, outErr os.Error) {
+func (p *Parser) readQuoted() (outStr string, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("\"")

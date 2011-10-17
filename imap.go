@@ -361,15 +361,15 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
-		flags, err := imap.r.parseParenStringList()
+		flags, err := imap.r.readParenStringList()
 		check(err)
 		imap.r.expect(" ")
 
-		delim, err := imap.r.parseQuoted()
+		delim, err := imap.r.readQuoted()
 		check(err)
 		imap.r.expect(" ")
 
-		mailbox, err := imap.r.parseQuoted()
+		mailbox, err := imap.r.readQuoted()
 		check(err)
 
 		check(imap.r.expectEOL())
@@ -396,7 +396,7 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 		return list, nil
 
 	case "FLAGS":
-		flags, err := imap.r.parseParenStringList()
+		flags, err := imap.r.readParenStringList()
 		check(err)
 
 		check(imap.r.expectEOL())
@@ -422,7 +422,7 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 			check(imap.r.expectEOL())
 			return &ResponseRecent{num}, nil
 		case "FETCH":
-			sexp, err := imap.r.parseSexp()
+			sexp, err := imap.r.readSexp()
 			check(err)
 			if len(sexp)%2 != 0 {
 				panic("fetch sexp must have even number of items")
