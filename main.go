@@ -65,19 +65,24 @@ func main() {
 	}
 
 	{
-		resp, err := imap.Examine("lkml")
+		resp, err := imap.Examine("INBOX")
 		check(err)
 		log.Printf("%s", resp)
 		log.Printf("%+v", resp)
 		readExtra(imap)
 	}
 
+	mbox, err := os.Create("mbox")
+	check(err)
+
 	{
-		fetches, err := imap.Fetch("1:4", []string{"ALL"})
+		fetches, err := imap.Fetch("1:4", []string{"RFC822"})
 		check(err)
 		log.Printf("%s", resp)
 		for _, fetch := range fetches {
-			log.Printf("%+v", fetch)
+			mbox.Write([]byte("From whatever\r\n"))
+			mbox.Write(fetch.rfc822)
+			mbox.Write([]byte("\r\n"))
 		}
 		readExtra(imap)
 	}

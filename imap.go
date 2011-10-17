@@ -264,7 +264,7 @@ func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.
 	if len(fields) == 1 {
 		fieldsStr = fields[0]
 	} else {
-		fieldsStr = "\"" + strings.Join(fields, " ") + "\""
+		fieldsStr = "(" + strings.Join(fields, " ") + ")"
 	}
 	resp, err := imap.SendSync("FETCH %s %s", sequence, fieldsStr)
 	if err != nil {
@@ -461,6 +461,7 @@ type ResponseFetch struct {
 	envelope     ResponseFetchEnvelope
 	internalDate string
 	size         int
+	rfc822, rfc822Header []byte
 }
 
 func (imap *IMAP) readCAPABILITY() *ResponseCapabilities {
@@ -551,11 +552,15 @@ func (imap *IMAP) readFETCH(num int) *ResponseFetch {
 			fetch.flags = sexp[i+1]
 		case "INTERNALDATE":
 			fetch.internalDate = sexp[i+1].(string)
+		case "RFC822":
+			fetch.rfc822 = sexp[i+1].([]byte)
+		case "RFC822.HEADER":
+			fetch.rfc822Header = sexp[i+1].([]byte)
 		case "RFC822.SIZE":
 			fetch.size, err = strconv.Atoi(sexp[i+1].(string))
 			check(err)
 		default:
-			panic(fmt.Sprintf("unhandled key %#v", key))
+			panic(fmt.Sprintf("unhandled fetch key %#v", key))
 		}
 	}
 	check(imap.r.expectEOL())
