@@ -66,12 +66,13 @@ const Untagged = tag(-1)
 
 type Response struct {
 	status Status
+	code   string
 	text   string
 	extra  []interface{}
 }
 
 func (r *Response) String() string {
-	return fmt.Sprintf("%s %s", r.status, r.text)
+	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
 }
 
 type ResponseChan chan *Response
@@ -94,10 +95,10 @@ func NewIMAP() *IMAP {
 	return &IMAP{pending: make(map[tag]chan *Response)}
 }
 
-func (imap *IMAP) Connect(hostport string) (string, os.Error) {
+func (imap *IMAP) Connect(hostport string) (*Response, os.Error) {
 	conn, err := tls.Dial("tcp", hostport, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	imap.r = newParser(conn) //&LoggingReader{conn})
@@ -105,20 +106,21 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 
 	tag, err := imap.readTag()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if tag != Untagged {
-		return "", fmt.Errorf("expected untagged server hello. got %q", tag)
+		return nil, fmt.Errorf("expected untagged server hello. got %q", tag)
 	}
 
-	status, text, err := imap.readStatus("")
-	if status != OK {
-		return "", fmt.Errorf("server hello %v %q", status, text)
+	resp, err := imap.readStatus("")
+	if err != nil {
+		return nil, err
+	}
+	if resp.status == OK {
+		imap.StartLoops()
 	}
 
-	imap.StartLoops()
-
-	return text, nil
+	return resp, nil
 }
 
 func (imap *IMAP) readTag() (tag, os.Error) {
@@ -307,17 +309,18 @@ func (imap *IMAP) ReadLoop() os.Error {
 				imap.unsolicited <- resp
 			}
 		} else {
-			status, text, err := imap.readStatus("")
+			resp, err := imap.readStatus("")
 			if err != nil {
 				return err
 			}
+			resp.extra = untagged
 
 			imap.lock.Lock()
 			ch := imap.pending[tag]
 			imap.pending[tag] = nil, false
 			imap.lock.Unlock()
 
-			ch <- &Response{status: status, text: text, extra: untagged}
+			ch <- resp
 			untagged = nil
 		}
 	}
@@ -325,33 +328,48 @@ func (imap *IMAP) ReadLoop() os.Error {
 	panic("not reached")
 }
 
-func (imap *IMAP) readStatus(code string) (Status, string, os.Error) {
-	if len(code) == 0 {
+func (imap *IMAP) readStatus(statusStr string) (*Response, os.Error) {
+	if len(statusStr) == 0 {
 		var err os.Error
-		code, err = imap.r.readToken()
+		statusStr, err = imap.r.readToken()
 		if err != nil {
-			return BAD, "", err
+			return nil, err
 		}
 	}
 
-	// TODO: response code
-	codes := map[string]Status{
+	statusStrs := map[string]Status{
 		"OK":  OK,
 		"NO":  NO,
 		"BAD": BAD,
 	}
 
-	status, known := codes[code]
+	status, known := statusStrs[statusStr]
 	if !known {
-		return BAD, "", fmt.Errorf("unexpected status %q", code)
+		return nil, fmt.Errorf("unexpected status %q", statusStr)
+	}
+
+	peek, err := imap.r.Peek(1)
+	if err != nil {
+		return nil, err
+	}
+	var code string
+	if peek[0] == '[' {
+		code, err = imap.r.readBracketed()
+		if err != nil {
+			return nil, err
+		}
+		err = imap.r.expect(" ")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	rest, err := imap.r.readToEOL()
 	if err != nil {
-		return BAD, "", err
+		return nil, err
 	}
 
-	return status, rest, nil
+	return &Response{status, code, rest, nil}, nil
 }
 
 type ResponseCapabilities struct {
@@ -543,9 +561,9 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	case "FLAGS":
 		return imap.readFLAGS(), nil
 	case "OK", "NO", "BAD":
-		status, text, err := imap.readStatus(command)
+		resp, err := imap.readStatus(command)
 		check(err)
-		return &Response{status, text, nil}, nil
+		return resp, nil
 	}
 
 	num, err := strconv.Atoi(command)

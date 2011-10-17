@@ -169,6 +169,16 @@ func (p *Parser) readLiteral() (literal []byte, outErr os.Error) {
 	return
 }
 
+func (p *Parser) readBracketed() (text string, outErr os.Error) {
+	defer recoverError(&outErr)
+
+	check(p.expect("["))
+	text, err := p.ReadString(']')
+	check(err)
+
+	return text, nil
+}
+
 func (p *Parser) readSexp() (sexp []Sexp, outErr os.Error) {
 	defer recoverError(&outErr)
 
