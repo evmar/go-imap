@@ -24,12 +24,12 @@ func recoverError(err *os.Error) {
 	}
 }
 
-type Sexp interface{}
+type sexp interface{}
 // One of:
 //   string
-//   []Sexp
+//   []sexp
 //   nil
-func nilOrString(s Sexp) *string {
+func nilOrString(s sexp) *string {
 	if s == nil {
 		return nil
 	}
@@ -179,18 +179,18 @@ func (p *Parser) readBracketed() (text string, outErr os.Error) {
 	return text, nil
 }
 
-func (p *Parser) readSexp() (sexp []Sexp, outErr os.Error) {
+func (p *Parser) readSexp() (s []sexp, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("(")
 	check(err)
 
-	sexps := make([]Sexp, 0, 4)
+	sexps := make([]sexp, 0, 4)
 	for {
 		c, err := p.ReadByte()
 		check(err)
 
-		var exp Sexp
+		var exp sexp
 		switch c {
 		case ')':
 			return sexps, nil

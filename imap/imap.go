@@ -1,19 +1,15 @@
+// Package imap implements an IMAP (RFC 3501) client.
 package imap
 
 import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 )
-
-func init() {
-	log.SetFlags(log.Ltime | log.Lshortfile)
-}
 
 func check(err os.Error) {
 	if err != nil {
@@ -21,6 +17,8 @@ func check(err os.Error) {
 	}
 }
 
+// Status represents server status codes which are returned by
+// commands.
 type Status int
 
 const (
@@ -62,27 +60,9 @@ const (
 	WildcardAnyRecursive = "*"
 )
 
-type TriBool int
-
-const (
-	TriUnknown = TriBool(iota)
-	TriTrue
-	TriFalse
-)
-
-func (t TriBool) String() string {
-	switch t {
-	case TriTrue:
-		return "true"
-	case TriFalse:
-		return "false"
-	}
-	return "unknown"
-}
-
 type tag int
 
-const Untagged = tag(-1)
+const untagged = tag(-1)
 
 type IMAP struct {
 	// Client thread.
@@ -115,7 +95,7 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 	if err != nil {
 		return "", err
 	}
-	if tag != Untagged {
+	if tag != untagged {
 		return "", fmt.Errorf("expected untagged server hello. got %q", tag)
 	}
 
@@ -135,24 +115,24 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 func (imap *IMAP) readTag() (tag, os.Error) {
 	str, err := imap.r.readToken()
 	if err != nil {
-		return Untagged, err
+		return untagged, err
 	}
 	if len(str) == 0 {
-		return Untagged, os.NewError("read empty tag")
+		return untagged, os.NewError("read empty tag")
 	}
 
 	switch str[0] {
 	case '*':
-		return Untagged, nil
+		return untagged, nil
 	case 'a':
 		tagnum, err := strconv.Atoi(str[1:])
 		if err != nil {
-			return Untagged, err
+			return untagged, err
 		}
 		return tag(tagnum), nil
 	}
 
-	return Untagged, fmt.Errorf("unexpected response %q", str)
+	return untagged, fmt.Errorf("unexpected response %q", str)
 }
 
 func (imap *IMAP) Send(ch chan *Response, format string, args ...interface{}) os.Error {
@@ -290,31 +270,31 @@ func (imap *IMAP) StartLoops() {
 }
 
 func (imap *IMAP) ReadLoop() os.Error {
-	var untagged []interface{}
+	var unsolicited []interface{}
 	for {
 		tag, err := imap.readTag()
 		if err != nil {
 			return err
 		}
 
-		if tag == Untagged {
+		if tag == untagged {
 			resp, err := imap.readUntagged()
 			if err != nil {
 				return err
 			}
 
-			if untagged == nil {
+			if unsolicited == nil {
 				imap.lock.Lock()
 				hasPending := len(imap.pending) > 0
 				imap.lock.Unlock()
 
 				if hasPending {
-					untagged = make([]interface{}, 0, 1)
+					unsolicited = make([]interface{}, 0, 1)
 				}
 			}
 
-			if untagged != nil {
-				untagged = append(untagged, resp)
+			if unsolicited != nil {
+				unsolicited = append(unsolicited, resp)
 			} else {
 				imap.Unsolicited <- resp
 			}
@@ -323,7 +303,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			if err != nil {
 				return err
 			}
-			resp.extra = untagged
+			resp.extra = unsolicited
 
 			imap.lock.Lock()
 			ch := imap.pending[tag]
@@ -331,7 +311,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			imap.lock.Unlock()
 
 			ch <- resp
-			untagged = nil
+			unsolicited = nil
 		}
 	}
 
@@ -400,10 +380,10 @@ type ResponseCapabilities struct {
 }
 
 type ResponseList struct {
-	Inferiors  TriBool
-	Selectable TriBool
-	Marked     TriBool
-	Children   TriBool
+	Inferiors,
+	Selectable,
+	Marked,
+	Children   *bool
 	Delim      string
 	Name       string
 }
@@ -423,7 +403,7 @@ type Address struct {
 	name, source, address string
 }
 
-func (a *Address) FromSexp(s []Sexp) {
+func (a *Address) fromSexp(s []sexp) {
 	if name := nilOrString(s[0]); name != nil {
 		a.name = *name
 	}
@@ -437,15 +417,15 @@ func (a *Address) FromSexp(s []Sexp) {
 		a.address = address
 	}
 }
-func AddressListFromSexp(s Sexp) []Address {
+func addressListFromSexp(s sexp) []Address {
 	if s == nil {
 		return nil
 	}
 
-	saddrs := s.([]Sexp)
+	saddrs := s.([]sexp)
 	addrs := make([]Address, len(saddrs))
 	for i, s := range saddrs {
-		addrs[i].FromSexp(s.([]Sexp))
+		addrs[i].fromSexp(s.([]sexp))
 	}
 	return addrs
 }
@@ -457,7 +437,7 @@ type ResponseFetchEnvelope struct {
 
 type ResponseFetch struct {
 	Msg          int
-	Flags        Sexp
+	Flags        sexp
 	Envelope     ResponseFetchEnvelope
 	InternalDate string
 	Size         int
@@ -497,17 +477,23 @@ func (imap *IMAP) readLIST() *ResponseList {
 	for _, flag := range flags {
 		switch flag {
 		case "\\Noinferiors":
-			list.Inferiors = TriFalse
+			b := false
+			list.Inferiors = &b
 		case "\\Noselect":
-			list.Selectable = TriFalse
+			b := false
+			list.Selectable = &b
 		case "\\Marked":
-			list.Marked = TriTrue
+			b := true
+			list.Marked = &b
 		case "\\Unmarked":
-			list.Marked = TriFalse
+			b := false
+			list.Marked = &b
 		case "\\HasChildren":
-			list.Children = TriTrue
+			b := true
+			list.Children = &b
 		case "\\HasNoChildren":
-			list.Children = TriFalse
+			b := false
+			list.Children = &b
 		default:
 			panic(fmt.Sprintf("unknown list flag %q", flag))
 		}
@@ -523,41 +509,41 @@ func (imap *IMAP) readFLAGS() *ResponseFlags {
 }
 
 func (imap *IMAP) readFETCH(num int) *ResponseFetch {
-	sexp, err := imap.r.readSexp()
+	s, err := imap.r.readSexp()
 	check(err)
-	if len(sexp)%2 != 0 {
+	if len(s)%2 != 0 {
 		panic("fetch sexp must have even number of items")
 	}
 	fetch := &ResponseFetch{Msg: num}
-	for i := 0; i < len(sexp); i += 2 {
-		key := sexp[i].(string)
+	for i := 0; i < len(s); i += 2 {
+		key := s[i].(string)
 		switch key {
 		case "ENVELOPE":
-			env := sexp[i+1].([]Sexp)
+			env := s[i+1].([]sexp)
 			// This format is insane.
 			if len(env) != 10 {
 				panic(fmt.Sprintf("envelope needed 10 fields, had %d", len(env)))
 			}
 			fetch.Envelope.date = nilOrString(env[0])
 			fetch.Envelope.subject = nilOrString(env[1])
-			fetch.Envelope.from = AddressListFromSexp(env[2])
-			fetch.Envelope.sender = AddressListFromSexp(env[3])
-			fetch.Envelope.replyTo = AddressListFromSexp(env[4])
-			fetch.Envelope.to = AddressListFromSexp(env[5])
-			fetch.Envelope.cc = AddressListFromSexp(env[6])
-			fetch.Envelope.bcc = AddressListFromSexp(env[7])
+			fetch.Envelope.from = addressListFromSexp(env[2])
+			fetch.Envelope.sender = addressListFromSexp(env[3])
+			fetch.Envelope.replyTo = addressListFromSexp(env[4])
+			fetch.Envelope.to = addressListFromSexp(env[5])
+			fetch.Envelope.cc = addressListFromSexp(env[6])
+			fetch.Envelope.bcc = addressListFromSexp(env[7])
 			fetch.Envelope.inReplyTo = nilOrString(env[8])
 			fetch.Envelope.messageId = nilOrString(env[9])
 		case "FLAGS":
-			fetch.Flags = sexp[i+1]
+			fetch.Flags = s[i+1]
 		case "INTERNALDATE":
-			fetch.InternalDate = sexp[i+1].(string)
+			fetch.InternalDate = s[i+1].(string)
 		case "RFC822":
-			fetch.Rfc822 = sexp[i+1].([]byte)
+			fetch.Rfc822 = s[i+1].([]byte)
 		case "RFC822.HEADER":
-			fetch.Rfc822Header = sexp[i+1].([]byte)
+			fetch.Rfc822Header = s[i+1].([]byte)
 		case "RFC822.SIZE":
-			fetch.Size, err = strconv.Atoi(sexp[i+1].(string))
+			fetch.Size, err = strconv.Atoi(s[i+1].(string))
 			check(err)
 		default:
 			panic(fmt.Sprintf("unhandled fetch key %#v", key))
