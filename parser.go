@@ -60,17 +60,6 @@ func (p *Parser) expect(text string) os.Error {
 	return nil
 }
 
-func (p *Parser) expectEOF() os.Error {
-	_, err := p.ReadByte()
-	if err != nil {
-		if err == os.EOF {
-			return nil
-		}
-		return err
-	}
-	return os.NewError("expected EOF")
-}
-
 func (p *Parser) readToken() (token string, outErr os.Error) {
 	defer recoverError(&outErr)
 

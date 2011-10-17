@@ -26,9 +26,14 @@ func (test parseTest) Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parsing %s: %s", test.input, err)
 	}
-	err = p.expectEOF()
+
+	_, err = p.ReadByte()
 	if err != nil {
-		t.Fatalf("parsing %s: %s", test.input, err)
+		if err != os.EOF {
+			t.Fatalf("parsing %s: %s", test.input, err)
+		}
+	} else {
+		t.Fatalf("parsing %s: expected EOF", test.input)
 	}
 
 	if !reflect.DeepEqual(ps, test.expected) {
