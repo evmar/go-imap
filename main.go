@@ -73,8 +73,9 @@ func main() {
 	imap.responseData = make(chan interface{}, 100)
 
 	log.Printf("connecting")
-	_, err := imap.Connect("imap.gmail.com:993")
+	hello, err := imap.Connect("imap.gmail.com:993")
 	check(err)
+	log.Printf("server hello: %s", hello)
 
 	ch := make(chan *Response, 1)
 
