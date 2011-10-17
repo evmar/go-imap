@@ -83,8 +83,8 @@ type IMAP struct {
 	unsolicited chan interface{}
 
 	// Background thread.
-	r        *Parser
-	w        io.Writer
+	r *Parser
+	w io.Writer
 
 	lock    sync.Mutex
 	pending map[tag]chan *Response
@@ -100,7 +100,7 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 		return "", err
 	}
 
-	imap.r = newParser(conn)//&LoggingReader{conn})
+	imap.r = newParser(conn) //&LoggingReader{conn})
 	imap.w = conn
 
 	tag, err := imap.readTag()
@@ -210,7 +210,7 @@ func (imap *IMAP) List(reference string, name string) (*Response, []*ResponseLis
 
 type ResponseExamine struct {
 	*Response
-	flags []string
+	flags  []string
 	exists int
 	recent int
 }
@@ -220,7 +220,7 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 	 Responses:  REQUIRED untagged responses: FLAGS, EXISTS, RECENT
 	 REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS,
 	 UIDNEXT, UIDVALIDITY
-	 */
+	*/
 	resp, err := imap.SendSync("EXAMINE %s", quote(mailbox))
 	if err != nil {
 		return nil, err
@@ -317,7 +317,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 			imap.pending[tag] = nil, false
 			imap.lock.Unlock()
 
-			ch <- &Response{status:status, text:text, extra:untagged}
+			ch <- &Response{status: status, text: text, extra: untagged}
 			untagged = nil
 		}
 	}
@@ -422,6 +422,20 @@ type ResponseFetch struct {
 	size         int
 }
 
+func (imap *IMAP) readCAPABILITY() *ResponseCapabilities {
+	caps := make([]string, 0)
+	for {
+		cap, err := imap.r.readToken()
+		check(err)
+		if len(cap) == 0 {
+			break
+		}
+		caps = append(caps, cap)
+	}
+	check(imap.r.expectEOL())
+	return &ResponseCapabilities{caps}
+}
+
 func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -438,17 +452,7 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 
 	switch command {
 	case "CAPABILITY":
-		caps := make([]string, 0)
-		for {
-			cap, err := imap.r.readToken()
-			check(err)
-			if len(cap) == 0 {
-				break
-			}
-			caps = append(caps, cap)
-		}
-		check(imap.r.expectEOL())
-		return &ResponseCapabilities{caps}, nil
+		return imap.readCAPABILITY(), nil
 
 	case "LIST":
 		// "(" [mbx-list-flags] ")" SP (DQUOTE QUOTED-CHAR DQUOTE / nil) SP mailbox
