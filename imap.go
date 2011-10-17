@@ -208,13 +208,41 @@ func (imap *IMAP) List(reference string, name string) (*Response, []*ResponseLis
 	return response, lists, nil
 }
 
-func (imap *IMAP) Examine(mailbox string) os.Error {
+type ResponseExamine struct {
+	*Response
+	flags []string
+	exists int
+	recent int
+}
+
+func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 	/*
 	 Responses:  REQUIRED untagged responses: FLAGS, EXISTS, RECENT
 	 REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS,
 	 UIDNEXT, UIDVALIDITY
 	 */
-	return imap.Send(ch, "EXAMINE %s", quote(mailbox))
+	resp, err := imap.SendSync("EXAMINE %s", quote(mailbox))
+	if err != nil {
+		return nil, err
+	}
+
+	r := &ResponseExamine{Response: resp}
+
+	extras := make([]interface{}, 0)
+	for _, extra := range r.extra {
+		switch extra := extra.(type) {
+		case (*ResponseFlags):
+			r.flags = extra.flags
+		case (*ResponseExists):
+			r.exists = extra.count
+		case (*ResponseRecent):
+			r.recent = extra.count
+		default:
+			extras = append(extras, extra)
+		}
+	}
+	r.extra = extras
+	return r, nil
 }
 
 func (imap *IMAP) Fetch(sequence string, fields []string, ch ResponseChan) os.Error {

@@ -82,21 +82,24 @@ func main() {
 	check(err)
 	log.Printf("%s", resp)
 
-	resp, lists, err := imap.List("", WildcardAny)
-	check(err)
-	log.Printf("%s", resp)
-	for _, list := range lists {
-		log.Printf("- %s", list)
+	if false {
+		resp, lists, err := imap.List("", WildcardAny)
+		check(err)
+		log.Printf("%s", resp)
+		for _, list := range lists {
+			log.Printf("- %s", list)
+		}
+	}
+
+	{
+		resp, err := imap.Examine("lkml")
+		check(err)
+		log.Printf("%s", resp)
+		log.Printf("%#v", resp)
+		log.Printf("%+v", resp.extra)
 	}
 
 	ch := make(chan *Response, 1)
-
-	err = imap.Examine("lkml", ch)
-	check(err)
-	state.list = &List{name:"lkml"}
-	state.Await(imap, ch)
-
-	log.Printf("%v", state.list)
 
 	err = imap.Fetch("1:4", []string{"ALL"}, ch)
 	check(err)
