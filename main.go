@@ -63,10 +63,11 @@ func main() {
 	log.Printf("%s", resp)
 
 	{
-		lists, err := im.List("", imap.WildcardAny)
+		mailboxes, err := im.List("", imap.WildcardAny)
 		check(err)
-		for _, list := range lists {
-			log.Printf("- %s", list)
+		log.Printf("Available mailboxes:")
+		for _, mailbox := range mailboxes {
+			log.Printf("- %s", mailbox.Name)
 		}
 		readExtra(im)
 	}
@@ -85,7 +86,6 @@ func main() {
 	{
 		fetches, err := im.Fetch("1:4", []string{"RFC822"})
 		check(err)
-		log.Printf("%s", resp)
 		for _, fetch := range fetches {
 			mbox.Write([]byte("From whatever\r\n"))
 			mbox.Write(fetch.Rfc822)

@@ -108,7 +108,7 @@ func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 		return "", err
 	}
 
-	imap.r = newParser(&LoggingReader{conn})
+	imap.r = newParser(conn) //&LoggingReader{conn})
 	imap.w = conn
 
 	tag, err := imap.readTag()
@@ -400,12 +400,12 @@ type ResponseCapabilities struct {
 }
 
 type ResponseList struct {
-	inferiors  TriBool
-	selectable TriBool
-	marked     TriBool
-	children   TriBool
-	delim      string
-	mailbox    string
+	Inferiors  TriBool
+	Selectable TriBool
+	Marked     TriBool
+	Children   TriBool
+	Delim      string
+	Name       string
 }
 
 type ResponseFlags struct {
@@ -488,26 +488,26 @@ func (imap *IMAP) readLIST() *ResponseList {
 	check(err)
 	imap.r.expect(" ")
 
-	mailbox, err := imap.r.readQuoted()
+	name, err := imap.r.readQuoted()
 	check(err)
 
 	check(imap.r.expectEOL())
 
-	list := &ResponseList{delim: string(delim), mailbox: string(mailbox)}
+	list := &ResponseList{Delim: string(delim), Name: string(name)}
 	for _, flag := range flags {
 		switch flag {
 		case "\\Noinferiors":
-			list.inferiors = TriFalse
+			list.Inferiors = TriFalse
 		case "\\Noselect":
-			list.selectable = TriFalse
+			list.Selectable = TriFalse
 		case "\\Marked":
-			list.marked = TriTrue
+			list.Marked = TriTrue
 		case "\\Unmarked":
-			list.marked = TriFalse
+			list.Marked = TriFalse
 		case "\\HasChildren":
-			list.children = TriTrue
+			list.Children = TriTrue
 		case "\\HasNoChildren":
-			list.children = TriFalse
+			list.Children = TriFalse
 		default:
 			panic(fmt.Sprintf("unknown list flag %q", flag))
 		}
