@@ -44,9 +44,6 @@ type Parser struct {
 func newParser(r io.Reader) *Parser {
 	return &Parser{bufio.NewReader(r)}
 }
-func newParserString(s string) *Parser {
-	return newParser(bytes.NewBufferString(s))
-}
 
 func (p *Parser) expect(text string) os.Error {
 	buf := make([]byte, len(text))

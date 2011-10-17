@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 	"os"
@@ -20,7 +21,7 @@ type parseTest struct {
 }
 
 func (test parseTest) Run(t *testing.T) {
-	p := newParserString(test.input)
+	p := newParser(bytes.NewBufferString(test.input))
 	ps, err := test.code(p)
 	if err != nil {
 		t.Fatalf("parsing %s: %s", test.input, err)
