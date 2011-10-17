@@ -70,7 +70,9 @@ func main() {
 		resp, fetches, err := imap.Fetch("1:4", []string{"ALL"})
 		check(err)
 		log.Printf("%s", resp)
-		log.Printf("%+v", fetches)
+		for _, fetch := range fetches {
+			log.Printf("%+v", fetch)
+		}
 		if len(resp.extra) > 0 {
 			log.Printf("extra %+v", resp.extra)
 		}

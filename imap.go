@@ -473,6 +473,54 @@ func (imap *IMAP) readLIST() *ResponseList {
 	return list
 }
 
+func (imap *IMAP) readFLAGS() *ResponseFlags {
+	flags, err := imap.r.readParenStringList()
+	check(err)
+	check(imap.r.expectEOL())
+	return &ResponseFlags{flags}
+}
+
+func (imap *IMAP) readFETCH(num int) *ResponseFetch {
+	sexp, err := imap.r.readSexp()
+	check(err)
+	if len(sexp)%2 != 0 {
+		panic("fetch sexp must have even number of items")
+	}
+	fetch := &ResponseFetch{msg: num}
+	for i := 0; i < len(sexp); i += 2 {
+		key := sexp[i].(string)
+		switch key {
+		case "ENVELOPE":
+			env := sexp[i+1].([]Sexp)
+			// This format is insane.
+			if len(env) != 10 {
+				panic(fmt.Sprintf("envelope needed 10 fields, had %d", len(env)))
+			}
+			fetch.envelope.date = nilOrString(env[0])
+			fetch.envelope.subject = nilOrString(env[1])
+			fetch.envelope.from = AddressListFromSexp(env[2])
+			fetch.envelope.sender = AddressListFromSexp(env[3])
+			fetch.envelope.replyTo = AddressListFromSexp(env[4])
+			fetch.envelope.to = AddressListFromSexp(env[5])
+			fetch.envelope.cc = AddressListFromSexp(env[6])
+			fetch.envelope.bcc = AddressListFromSexp(env[7])
+			fetch.envelope.inReplyTo = nilOrString(env[8])
+			fetch.envelope.messageId = nilOrString(env[9])
+		case "FLAGS":
+			fetch.flags = sexp[i+1]
+		case "INTERNALDATE":
+			fetch.internalDate = sexp[i+1].(string)
+		case "RFC822.SIZE":
+			fetch.size, err = strconv.Atoi(sexp[i+1].(string))
+			check(err)
+		default:
+			panic(fmt.Sprintf("unhandled key %#v", key))
+		}
+	}
+	check(imap.r.expectEOL())
+	return fetch
+}
+
 func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -492,15 +540,8 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 		return imap.readCAPABILITY(), nil
 	case "LIST":
 		return imap.readLIST(), nil
-
 	case "FLAGS":
-		flags, err := imap.r.readParenStringList()
-		check(err)
-
-		check(imap.r.expectEOL())
-
-		return &ResponseFlags{flags}, nil
-
+		return imap.readFLAGS(), nil
 	case "OK", "NO", "BAD":
 		status, text, err := imap.readStatus(command)
 		check(err)
@@ -520,46 +561,7 @@ func (imap *IMAP) readUntagged() (resp interface{}, outErr os.Error) {
 			check(imap.r.expectEOL())
 			return &ResponseRecent{num}, nil
 		case "FETCH":
-			sexp, err := imap.r.readSexp()
-			check(err)
-			if len(sexp)%2 != 0 {
-				panic("fetch sexp must have even number of items")
-			}
-			fetch := &ResponseFetch{msg: num}
-			for i := 0; i < len(sexp); i += 2 {
-				key := sexp[i].(string)
-				switch key {
-				case "ENVELOPE":
-					env := sexp[i+1].([]Sexp)
-					// This format is insane.
-					if len(env) != 10 {
-						return nil, fmt.Errorf("envelope needed 10 fields, had %d", len(env))
-					}
-					fetch.envelope.date = nilOrString(env[0])
-					fetch.envelope.subject = nilOrString(env[1])
-					fetch.envelope.from = AddressListFromSexp(env[2])
-					fetch.envelope.sender = AddressListFromSexp(env[3])
-					fetch.envelope.replyTo = AddressListFromSexp(env[4])
-					fetch.envelope.to = AddressListFromSexp(env[5])
-					fetch.envelope.cc = AddressListFromSexp(env[6])
-					fetch.envelope.bcc = AddressListFromSexp(env[7])
-					fetch.envelope.inReplyTo = nilOrString(env[8])
-					fetch.envelope.messageId = nilOrString(env[9])
-				case "FLAGS":
-					fetch.flags = sexp[i+1]
-				case "INTERNALDATE":
-					fetch.internalDate = sexp[i+1].(string)
-				case "RFC822.SIZE":
-					fetch.size, err = strconv.Atoi(sexp[i+1].(string))
-					if err != nil {
-						return nil, err
-					}
-				default:
-					panic(fmt.Sprintf("unhandled key %#v", key))
-				}
-			}
-			check(imap.r.expectEOL())
-			return fetch, nil
+			return imap.readFETCH(num), nil
 		}
 	}
 
