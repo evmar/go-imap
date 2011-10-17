@@ -383,9 +383,9 @@ type ResponseList struct {
 	Inferiors,
 	Selectable,
 	Marked,
-	Children   *bool
-	Delim      string
-	Name       string
+	Children *bool
+	Delim string
+	Name  string
 }
 
 type ResponseFlags struct {
@@ -436,11 +436,11 @@ type ResponseFetchEnvelope struct {
 }
 
 type ResponseFetch struct {
-	Msg          int
-	Flags        sexp
-	Envelope     ResponseFetchEnvelope
-	InternalDate string
-	Size         int
+	Msg                  int
+	Flags                sexp
+	Envelope             ResponseFetchEnvelope
+	InternalDate         string
+	Size                 int
 	Rfc822, Rfc822Header []byte
 }
 

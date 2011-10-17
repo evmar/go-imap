@@ -15,8 +15,8 @@ func testError(t *testing.T, err os.Error, format string, args ...interface{}) {
 }
 
 type parseTest struct {
-	input string
-	code func(p *Parser) (interface{}, os.Error)
+	input    string
+	code     func(p *Parser) (interface{}, os.Error)
 	expected interface{}
 }
 
@@ -43,8 +43,8 @@ func (test parseTest) Run(t *testing.T) {
 
 func TestParseString(t *testing.T) {
 	parseTest{
-		input: "\"foo bar\"",
-		code: func(p *Parser) (interface{}, os.Error) { return p.readQuoted() },
+		input:    "\"foo bar\"",
+		code:     func(p *Parser) (interface{}, os.Error) { return p.readQuoted() },
 		expected: "foo bar",
 	}.Run(t)
 }
@@ -52,17 +52,16 @@ func TestParseString(t *testing.T) {
 func TestParseLiteral(t *testing.T) {
 	tests := []parseTest{
 		{
-			input: "{5}\r\n01234",
-			code: func(p *Parser) (interface{}, os.Error) { return p.readLiteral() },
+			input:    "{5}\r\n01234",
+			code:     func(p *Parser) (interface{}, os.Error) { return p.readLiteral() },
 			expected: []byte("01234"),
 		},
 
 		{
-			input: "({2}\r\nAB abc)",
-			code: func(p *Parser) (interface{}, os.Error) { return p.readSexp() },
+			input:    "({2}\r\nAB abc)",
+			code:     func(p *Parser) (interface{}, os.Error) { return p.readSexp() },
 			expected: []Sexp{[]byte("AB"), "abc"},
 		},
-
 	}
 
 	for _, test := range tests {
@@ -89,7 +88,7 @@ func TestParseSimple(t *testing.T) {
 func TestParseComplex(t *testing.T) {
 	parseTest{
 		input: `(ENVELOPE ("Fri, 14 Oct 2011 13:51:22 -0700" "Re: [PATCH 1/1] added code to export CAP_LAST_CAP in /proc/sys/kernel modeled after ngroups_max" (("Andrew Morton" NIL "akpm" "linux-foundation.org")) ((NIL NIL "linux-kernel-owner" "vger.kernel.org")) (("Andrew Morton" NIL "akpm" "linux-foundation.org")) (("Dan Ballard" NIL "dan" "mindstab.net")) (("Ingo Molnar" NIL "mingo" "elte.hu") ("Lennart Poettering" NIL "lennart" "poettering.net") ("Kay Sievers" NIL "kay.sievers" "vrfy.org") (NIL NIL "linux-kernel" "vger.kernel.org")) NIL "<1318460194-31983-1-git-send-email-dan@mindstab.net>" "<20111014135122.4bb95565.akpm@linux-foundation.org>") FLAGS () INTERNALDATE "14-Oct-2011 20:51:30 +0000" RFC822.SIZE 4623)`,
-		code: func(p *Parser) (interface{}, os.Error) { return p.readSexp() },
+		code:  func(p *Parser) (interface{}, os.Error) { return p.readSexp() },
 
 		expected: []Sexp{"ENVELOPE",
 			[]Sexp{"Fri, 14 Oct 2011 13:51:22 -0700",
