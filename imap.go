@@ -37,6 +37,27 @@ func (s Status) String() string {
 	}[s]
 }
 
+type Response struct {
+	status Status
+	code   string
+	text   string
+	extra  []interface{}
+}
+
+func (r *Response) String() string {
+	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
+}
+
+type IMAPError struct {
+	status Status
+	text string
+}
+
+func (e *IMAPError) String() string {
+	return fmt.Sprintf("%s %s", e.status, e.text)
+}
+
+
 const (
 	WildcardAny          = "%"
 	WildcardAnyRecursive = "*"
@@ -64,17 +85,6 @@ type tag int
 
 const Untagged = tag(-1)
 
-type Response struct {
-	status Status
-	code   string
-	text   string
-	extra  []interface{}
-}
-
-func (r *Response) String() string {
-	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
-}
-
 type ResponseChan chan *Response
 
 type IMAP struct {
@@ -95,10 +105,10 @@ func NewIMAP() *IMAP {
 	return &IMAP{pending: make(map[tag]chan *Response)}
 }
 
-func (imap *IMAP) Connect(hostport string) (*Response, os.Error) {
+func (imap *IMAP) Connect(hostport string) (string, os.Error) {
 	conn, err := tls.Dial("tcp", hostport, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	imap.r = newParser(&LoggingReader{conn})
@@ -106,21 +116,23 @@ func (imap *IMAP) Connect(hostport string) (*Response, os.Error) {
 
 	tag, err := imap.readTag()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if tag != Untagged {
-		return nil, fmt.Errorf("expected untagged server hello. got %q", tag)
+		return "", fmt.Errorf("expected untagged server hello. got %q", tag)
 	}
 
 	resp, err := imap.readStatus("")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if resp.status == OK {
-		imap.StartLoops()
+	if resp.status != OK {
+		return "", &IMAPError{resp.status, resp.text}
 	}
 
-	return resp, nil
+	imap.StartLoops()
+
+	return resp.text, nil
 }
 
 func (imap *IMAP) readTag() (tag, os.Error) {
