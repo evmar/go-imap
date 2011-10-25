@@ -175,6 +175,7 @@ func (p *parser) readBracketed() (text string, outErr os.Error) {
 	check(p.expect("["))
 	text, err := p.ReadString(']')
 	check(err)
+	text = text[0:len(text)-1]
 
 	return text, nil
 }
