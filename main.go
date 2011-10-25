@@ -132,11 +132,23 @@ func main() {
 
 		query := fmt.Sprintf("1:%d", examine.Exists)
 		vprintf("fetching %s", query)
-		fetches, err := im.Fetch(query, []string{"RFC822"})
+
+		ch, err := im.FetchAsync(query, []string{"RFC822"})
 		check(err)
-		for i, fetch := range fetches {
-			mbox.writeMessage(fetch.Rfc822)
-			fmt.Printf("%d\n", i)
+
+		i := 0
+	L:
+		for {
+			r := <-ch
+			switch r := r.(type) {
+			case *imap.ResponseFetch:
+				mbox.writeMessage(r.Rfc822)
+				fmt.Printf("%d\n", i)
+				i++
+			case *imap.ResponseStatus:
+				fmt.Printf("%v\n", r)
+				break L
+			}
 		}
 		readExtra(im)
 

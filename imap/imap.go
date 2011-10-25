@@ -197,14 +197,18 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 	return r, nil
 }
 
-func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.Error) {
+func formatFetch(sequence string, fields []string) string {
 	var fieldsStr string
 	if len(fields) == 1 {
 		fieldsStr = fields[0]
 	} else {
 		fieldsStr = "(" + strings.Join(fields, " ") + ")"
 	}
-	resp, err := imap.SendSync("FETCH %s %s", sequence, fieldsStr)
+	return fmt.Sprintf("FETCH %s %s", sequence, fieldsStr)
+}
+
+func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.Error) {
+	resp, err := imap.SendSync("%s", formatFetch(sequence, fields))
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +222,33 @@ func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.
 		}
 	}
 	return lists, nil
+}
+
+func (imap *IMAP) FetchAsync(sequence string, fields []string) (chan interface{}, os.Error) {
+	ch := make(chan interface{})
+	err := imap.Send(ch, formatFetch(sequence, fields))
+	if err != nil {
+		return nil, err
+	}
+
+	// Stream all responses to this message into outChan, and everything
+	// else into unsolicited.
+	outChan := make(chan interface{})
+	go func() {
+		for {
+			r := <-ch
+			switch r := r.(type) {
+			case *ResponseFetch:
+				outChan <- r
+			case *ResponseStatus:
+				outChan <- r
+				return
+			default:
+				imap.Unsolicited <- r
+			}
+		}
+	}()
+	return outChan, nil
 }
 
 // Repeatedly reads messages off the connection and dispatches them.
