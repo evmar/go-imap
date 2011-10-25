@@ -157,8 +157,10 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 			r.Exists = extra.Count
 		case (*ResponseRecent):
 			r.Recent = extra.Count
+		// XXX unseen
 		case (*ResponsePermanentFlags):
 			r.PermanentFlags = extra.Flags
+		// XXX uidnext
 		case (*ResponseUIDValidity):
 			value := extra.Value
 			r.UIDValidity = value
