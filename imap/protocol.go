@@ -10,7 +10,7 @@ type reader struct {
 	*parser
 }
 
-func (r *reader) readOne() (tag, interface{}, os.Error) {
+func (r *reader) readResponse() (tag, interface{}, os.Error) {
 	tag, err := r.readTag()
 	if err != nil {
 		return untagged, nil, err

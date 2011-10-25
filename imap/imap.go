@@ -85,7 +85,7 @@ func New(r io.Reader, w io.Writer) *IMAP {
 }
 
 func (imap *IMAP) Start() (string, os.Error) {
-	tag, r, err := imap.r.readOne()
+	tag, r, err := imap.r.readResponse()
 	if err != nil {
 		return "", err
 	}
@@ -239,7 +239,7 @@ func (imap *IMAP) StartLoops() {
 func (imap *IMAP) ReadLoop() os.Error {
 	var unsolicited []interface{}
 	for {
-		tag, r, err := imap.r.readOne()
+		tag, r, err := imap.r.readResponse()
 		check(err)
 		if tag == untagged {
 			if unsolicited == nil {

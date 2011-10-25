@@ -12,6 +12,6 @@ func serverResponse(text string) *reader {
 
 func TestStatus(t *testing.T) {
 	r := serverResponse("* OK [PERMANENTFLAGS ()] Flags permitted.\r\n")
-	_, _, err := r.readOne()
+	_, _, err := r.readResponse()
 	check(err)
 }
