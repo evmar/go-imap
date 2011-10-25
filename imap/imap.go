@@ -35,7 +35,7 @@ func (s Status) String() string {
 
 type Response struct {
 	status Status
-	code   string
+	code   interface{}
 	text   string
 	extra  []interface{}
 }

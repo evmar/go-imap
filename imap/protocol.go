@@ -59,14 +59,29 @@ func (r *reader) readTag() (tag, os.Error) {
 	return untagged, fmt.Errorf("unexpected response %q", str)
 }
 
+type ResponsePermanentFlags struct {
+	Flags []string
+}
+type ResponseUIDValidity struct {
+	Value int
+}
+
 // Read a status response, one starting with OK/NO/BAD.
-func (r *reader) readStatus(statusStr string) (*Response, os.Error) {
+func (r *reader) readStatus(statusStr string) (resp *Response, outErr os.Error) {
+	defer func() {
+		if e := recover(); e != nil {
+			if osErr, ok := e.(os.Error); ok {
+				outErr = osErr
+				return
+			}
+			panic(e)
+		}
+	}()
+
 	if len(statusStr) == 0 {
 		var err os.Error
 		statusStr, err = r.readToken()
-		if err != nil {
-			return nil, err
-		}
+		check(err)
 	}
 
 	statusStrs := map[string]Status{
@@ -77,18 +92,34 @@ func (r *reader) readStatus(statusStr string) (*Response, os.Error) {
 
 	status, known := statusStrs[statusStr]
 	if !known {
-		return nil, fmt.Errorf("unexpected status %q", statusStr)
+		panic(fmt.Errorf("unexpected status %q", statusStr))
 	}
 
-	peek, err := r.Peek(1)
-	if err != nil {
-		return nil, err
-	}
-	var code string
-	if peek[0] == '[' {
-		code, err = r.readBracketed()
-		if err != nil {
-			return nil, err
+	peek, err := r.ReadByte()
+	check(err)
+	var code interface{}
+	if peek != '[' {
+		r.UnreadByte()
+	} else {
+		codeStr, err := r.readToken()
+		check(err)
+
+		switch codeStr {
+		case "PERMANENTFLAGS":
+			/* "PERMANENTFLAGS" SP "(" [flag-perm *(SP flag-perm)] ")" */
+			flags, err := r.readParenStringList()
+			check(err)
+			code = &ResponsePermanentFlags{flags}
+			check(r.expect("]"))
+		case "UIDVALIDITY":
+			num, err := r.readNumber()
+			check(err)
+			code = &ResponseUIDValidity{num}
+			check(r.expect("]"))
+		default:
+			text, err := r.ReadString(']')
+			check(err)
+			code = codeStr + " " + text[0:len(text)-1]
 		}
 
 		/*
@@ -103,16 +134,11 @@ func (r *reader) readStatus(statusStr string) (*Response, os.Error) {
 		 atom [SP 1*<any TEXT-CHAR except "]">]
 		*/
 
-		err = r.expect(" ")
-		if err != nil {
-			return nil, err
-		}
+		check(r.expect(" "))
 	}
 
 	rest, err := r.readToEOL()
-	if err != nil {
-		return nil, err
-	}
+	check(err)
 
 	return &Response{status, code, rest, nil}, nil
 }

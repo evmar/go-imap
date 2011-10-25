@@ -75,11 +75,28 @@ func (p *parser) readToken() (token string, outErr os.Error) {
 		case ' ':
 			return buf.String(), nil
 		case '\r':
-			err := p.UnreadByte()
-			check(err)
+			check(p.UnreadByte())
 			return buf.String(), nil
 		}
 		buf.WriteByte(c)
+	}
+
+	panic("not reached")
+}
+
+func (p *parser) readNumber() (num int, outErr os.Error) {
+	defer recoverError(&outErr)
+
+	num = 0
+	for {
+		c, err := p.ReadByte()
+		check(err)
+		if c >= '0' && c <= '9' {
+			num = num * 10 + int(c - '0')
+		} else {
+			check(p.UnreadByte())
+			return num, nil
+		}
 	}
 
 	panic("not reached")
