@@ -10,6 +10,7 @@ type reader struct {
 	*parser
 }
 
+// Read a full response (e.g. "* OK foobar\r\n").
 func (r *reader) readResponse() (tag, interface{}, os.Error) {
 	tag, err := r.readTag()
 	if err != nil {
@@ -33,6 +34,8 @@ func (r *reader) readResponse() (tag, interface{}, os.Error) {
 	panic("not reached")
 }
 
+// Read the tag, the first part of the response.
+// Expects either "*" or "a123".
 func (r *reader) readTag() (tag, os.Error) {
 	str, err := r.readToken()
 	if err != nil {
@@ -56,6 +59,7 @@ func (r *reader) readTag() (tag, os.Error) {
 	return untagged, fmt.Errorf("unexpected response %q", str)
 }
 
+// Read a status response, one starting with OK/NO/BAD.
 func (r *reader) readStatus(statusStr string) (*Response, os.Error) {
 	if len(statusStr) == 0 {
 		var err os.Error
