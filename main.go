@@ -58,7 +58,7 @@ func main() {
 
 	var r io.Reader = conn
 	if verbose {
-		r = newLoggingReader(r, 100)
+		r = newLoggingReader(r, 300)
 	}
 	im := imap.New(r, conn)
 	im.Unsolicited = make(chan interface{}, 100)

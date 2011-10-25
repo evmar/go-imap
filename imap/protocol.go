@@ -119,7 +119,11 @@ func (r *reader) readStatus(statusStr string) (resp *Response, outErr os.Error) 
 		default:
 			text, err := r.ReadString(']')
 			check(err)
-			code = codeStr + " " + text[0:len(text)-1]
+			if len(text) > 1 {
+				code = codeStr + " " + text[0:len(text)-1]
+			} else {
+				code = codeStr
+			}
 		}
 
 		/*

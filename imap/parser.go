@@ -74,7 +74,7 @@ func (p *parser) readToken() (token string, outErr os.Error) {
 		switch c {
 		case ' ':
 			return buf.String(), nil
-		case '\r':
+		case ']', '\r':
 			check(p.UnreadByte())
 			return buf.String(), nil
 		}
