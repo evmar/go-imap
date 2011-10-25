@@ -263,17 +263,9 @@ func (imap *IMAP) StartLoops() {
 func (imap *IMAP) ReadLoop() os.Error {
 	var unsolicited []interface{}
 	for {
-		tag, err := imap.readTag()
-		if err != nil {
-			return err
-		}
-
+		tag, r, err := imap.readOne()
+		check(err)
 		if tag == untagged {
-			resp, err := imap.readUntagged()
-			if err != nil {
-				return err
-			}
-
 			if unsolicited == nil {
 				imap.lock.Lock()
 				hasPending := len(imap.pending) > 0
@@ -285,15 +277,12 @@ func (imap *IMAP) ReadLoop() os.Error {
 			}
 
 			if unsolicited != nil {
-				unsolicited = append(unsolicited, resp)
+				unsolicited = append(unsolicited, r)
 			} else {
-				imap.Unsolicited <- resp
+				imap.Unsolicited <- r
 			}
 		} else {
-			resp, err := imap.readStatus("")
-			if err != nil {
-				return err
-			}
+			resp := r.(*Response)
 			resp.extra = unsolicited
 
 			imap.lock.Lock()
@@ -304,6 +293,28 @@ func (imap *IMAP) ReadLoop() os.Error {
 			ch <- resp
 			unsolicited = nil
 		}
+	}
+	panic("not reached")
+}
+
+func (imap *IMAP) readOne() (tag, interface{}, os.Error) {
+	tag, err := imap.readTag()
+	if err != nil {
+		return untagged, nil, err
+	}
+
+	if tag == untagged {
+		resp, err := imap.readUntagged()
+		if err != nil {
+			return untagged, nil, err
+		}
+		return tag, resp, nil
+	} else {
+		resp, err := imap.readStatus("")
+		if err != nil {
+			return untagged, nil, err
+		}
+		return tag, resp, nil
 	}
 
 	panic("not reached")
