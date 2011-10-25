@@ -80,16 +80,15 @@ func main() {
 		readExtra(im)
 	}
 
-	mbox, err := os.Create("mbox")
+	f, err := os.Create("mbox")
 	check(err)
+	mbox := newMbox(f)
 
 	{
 		fetches, err := im.Fetch("1:4", []string{"RFC822"})
 		check(err)
 		for _, fetch := range fetches {
-			mbox.Write([]byte("From whatever\r\n"))
-			mbox.Write(fetch.Rfc822)
-			mbox.Write([]byte("\r\n"))
+			mbox.writeMessage(fetch.Rfc822)
 		}
 		readExtra(im)
 	}

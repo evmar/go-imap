@@ -6,5 +6,6 @@ LDIMPORTS=-Limap/_obj
 TARG=imapsync
 GOFILES=\
 	main.go\
+	mbox.go\
 
 include $(GOROOT)/src/Make.cmd
