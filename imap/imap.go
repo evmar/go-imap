@@ -2,7 +2,6 @@
 package imap
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"os"
@@ -78,19 +77,11 @@ type IMAP struct {
 	pending map[tag]chan *Response
 }
 
-func NewIMAP() *IMAP {
-	return &IMAP{pending: make(map[tag]chan *Response)}
+func New(r io.Reader, w io.Writer) *IMAP {
+	return &IMAP{r: newParser(r), w: w, pending: make(map[tag]chan *Response)}
 }
 
-func (imap *IMAP) Connect(hostport string) (string, os.Error) {
-	conn, err := tls.Dial("tcp", hostport, nil)
-	if err != nil {
-		return "", err
-	}
-
-	imap.r = newParser(conn) //&LoggingReader{conn})
-	imap.w = conn
-
+func (imap *IMAP) Start() (string, os.Error) {
 	tag, err := imap.readTag()
 	if err != nil {
 		return "", err

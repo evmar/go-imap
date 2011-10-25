@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"io"
 	"os"
 	"bufio"
 	"imap"
@@ -44,16 +46,25 @@ func readExtra(im *imap.IMAP) {
 	}
 }
 
+var verbose bool = true
+
 func main() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 
 	user, pass := loadAuth("auth")
 
-	im := imap.NewIMAP()
+	conn, err := tls.Dial("tcp", "imap.gmail.com:993", nil)
+	check(err)
+
+	var r io.Reader = conn
+	if verbose {
+		r = newLoggingReader(r, 100)
+	}
+	im := imap.New(r, conn)
 	im.Unsolicited = make(chan interface{}, 100)
 
 	log.Printf("connecting")
-	hello, err := im.Connect("imap.gmail.com:993")
+	hello, err := im.Start()
 	check(err)
 	log.Printf("server hello: %s", hello)
 

@@ -1,4 +1,4 @@
-package imap
+package main
 
 import (
 	"io"
@@ -10,6 +10,11 @@ var logger *log.Logger
 
 type LoggingReader struct {
 	r io.Reader
+	max int
+}
+
+func newLoggingReader(r io.Reader, max int) *LoggingReader {
+	return &LoggingReader{r, max}
 }
 
 func (r *LoggingReader) Read(p []byte) (int, os.Error) {
@@ -21,6 +26,11 @@ func (r *LoggingReader) Read(p []byte) (int, os.Error) {
 	if err != nil {
 		return n, err
 	}
-	logger.Printf("<- %q", p[0:n])
+
+	if r.max > 0 && n > r.max {
+		logger.Printf("<- %q...", p[0:r.max])
+	} else {
+		logger.Printf("<- %q", p[0:n])
+	}
 	return n, err
 }
