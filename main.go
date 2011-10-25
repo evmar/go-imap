@@ -20,6 +20,12 @@ func check(err os.Error) {
 	}
 }
 
+func vprintf(fmt string, args ...interface{}) {
+	if *verbose {
+		log.Printf(fmt, args...)
+	}
+}
+
 func loadAuth(path string) (string, string) {
 	f, err := os.Open(path)
 	check(err)
@@ -64,24 +70,16 @@ func connect() *imap.IMAP {
 	im := imap.New(r, conn)
 	im.Unsolicited = make(chan interface{}, 100)
 
-	if *verbose {
-		log.Printf("connecting")
-	}
+	vprintf("connecting")
 	hello, err := im.Start()
 	check(err)
-	if *verbose {
-		log.Printf("server hello: %s", hello)
-	}
+	vprintf("server hello: %s", hello)
 
-	if *verbose {
-		log.Printf("logging in")
-	}
+	vprintf("logging in")
 	resp, caps, err := im.Auth(user, pass)
 	check(err)
-	if *verbose {
-		log.Printf("capabilities: %s", caps)
-		log.Printf("%s", resp)
-	}
+	vprintf("capabilities: %s", caps)
+	vprintf("%s", resp)
 
 	return im
 }
@@ -123,26 +121,25 @@ func main() {
 		mailbox := args[0]
 
 		im := connect()
-		{
-			resp, err := im.Examine(mailbox)
-			check(err)
-			log.Printf("%s", resp)
-			log.Printf("%+v", resp)
-			readExtra(im)
-		}
+		examine, err := im.Examine(mailbox)
+		check(err)
+		vprintf("%+v", examine)
+		readExtra(im)
 
 		f, err := os.Create(mailbox + ".mbox")
 		check(err)
 		mbox := newMbox(f)
 
-		{
-			fetches, err := im.Fetch("1:4", []string{"RFC822"})
-			check(err)
-			for _, fetch := range fetches {
-				mbox.writeMessage(fetch.Rfc822)
-			}
-			readExtra(im)
+		query := fmt.Sprintf("1:%d", examine.Exists)
+		vprintf("fetching %s", query)
+		fetches, err := im.Fetch(query, []string{"RFC822"})
+		check(err)
+		for i, fetch := range fetches {
+			mbox.writeMessage(fetch.Rfc822)
+			fmt.Printf("%d\n", i)
 		}
+		readExtra(im)
+
 	default:
 		usage()
 	}
