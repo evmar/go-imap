@@ -31,8 +31,8 @@ type IMAP struct {
 
 func New(r io.Reader, w io.Writer) *IMAP {
 	return &IMAP{
-		r: &reader{newParser(r)},
-		w: w,
+		r:       &reader{newParser(r)},
+		w:       w,
 		pending: make(map[tag]chan *ResponseStatus),
 	}
 }
@@ -129,11 +129,11 @@ func (imap *IMAP) List(reference string, name string) ([]*ResponseList, os.Error
 }
 
 type ResponseExamine struct {
-	Flags  []string
-	Exists int
-	Recent int
+	Flags          []string
+	Exists         int
+	Recent         int
 	PermanentFlags []string
-	UIDValidity int
+	UIDValidity    int
 }
 
 func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
@@ -268,4 +268,3 @@ func addressListFromSexp(s sexp) []Address {
 	}
 	return addrs
 }
-
