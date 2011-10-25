@@ -67,7 +67,7 @@ type ResponseUIDValidity struct {
 }
 
 // Read a status response, one starting with OK/NO/BAD.
-func (r *reader) readStatus(statusStr string) (resp *Response, outErr os.Error) {
+func (r *reader) readStatus(statusStr string) (resp *ResponseStatus, outErr os.Error) {
 	defer func() {
 		if e := recover(); e != nil {
 			if osErr, ok := e.(os.Error); ok {
@@ -144,7 +144,7 @@ func (r *reader) readStatus(statusStr string) (resp *Response, outErr os.Error) 
 	rest, err := r.readToEOL()
 	check(err)
 
-	return &Response{status, code, rest, nil}, nil
+	return &ResponseStatus{status, code, rest, nil}, nil
 }
 
 func (r *reader) readCAPABILITY() *ResponseCapabilities {

@@ -30,7 +30,7 @@ func TestProtocol(t *testing.T) {
 		readerTest{
 			"* OK Gimap ready for requests from 12.34 u6if.369\r\n",
 			untagged,
-			&Response{
+			&ResponseStatus{
 				status: OK,
 				text: "Gimap ready for requests from 12.34 u6if.369",
 			},
@@ -48,7 +48,7 @@ func TestProtocol(t *testing.T) {
 		readerTest{
 			"* OK [UIDNEXT 31677] Predicted next UID.\r\n",
 			untagged,
-			&Response{
+			&ResponseStatus{
 				status: OK,
 				code: "UIDNEXT 31677",
 				text: "Predicted next UID.",
@@ -57,7 +57,7 @@ func TestProtocol(t *testing.T) {
 		readerTest{
 			"a2 OK [READ-ONLY] INBOX selected. (Success)\r\n",
 			tag(2),
-			&Response{
+			&ResponseStatus{
 				status: OK,
 				code:"READ-ONLY",
 				text:"INBOX selected. (Success)",

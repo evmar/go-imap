@@ -33,14 +33,14 @@ func (s Status) String() string {
 	}[s]
 }
 
-type Response struct {
+type ResponseStatus struct {
 	status Status
 	code   interface{}
 	text   string
 	extra  []interface{}
 }
 
-func (r *Response) String() string {
+func (r *ResponseStatus) String() string {
 	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
 }
 
@@ -73,14 +73,14 @@ type IMAP struct {
 	w io.Writer
 
 	lock    sync.Mutex
-	pending map[tag]chan *Response
+	pending map[tag]chan *ResponseStatus
 }
 
 func New(r io.Reader, w io.Writer) *IMAP {
 	return &IMAP{
 		r: &reader{newParser(r)},
 		w: w,
-		pending: make(map[tag]chan *Response),
+		pending: make(map[tag]chan *ResponseStatus),
 	}
 }
 
@@ -92,7 +92,7 @@ func (imap *IMAP) Start() (string, os.Error) {
 	if tag != untagged {
 		return "", fmt.Errorf("expected untagged server hello. got %q", tag)
 	}
-	resp := r.(*Response)
+	resp := r.(*ResponseStatus)
 	if resp.status != OK {
 		return "", &IMAPError{resp.status, resp.text}
 	}
@@ -102,7 +102,7 @@ func (imap *IMAP) Start() (string, os.Error) {
 	return resp.text, nil
 }
 
-func (imap *IMAP) Send(ch chan *Response, format string, args ...interface{}) os.Error {
+func (imap *IMAP) Send(ch chan *ResponseStatus, format string, args ...interface{}) os.Error {
 	tag := tag(imap.nextTag)
 	imap.nextTag++
 
@@ -118,8 +118,8 @@ func (imap *IMAP) Send(ch chan *Response, format string, args ...interface{}) os
 	return err
 }
 
-func (imap *IMAP) SendSync(format string, args ...interface{}) (*Response, os.Error) {
-	ch := make(chan *Response, 1)
+func (imap *IMAP) SendSync(format string, args ...interface{}) (*ResponseStatus, os.Error) {
+	ch := make(chan *ResponseStatus, 1)
 	err := imap.Send(ch, format, args...)
 	if err != nil {
 		return nil, err
@@ -261,7 +261,7 @@ func (imap *IMAP) ReadLoop() os.Error {
 				imap.Unsolicited <- r
 			}
 		} else {
-			resp := r.(*Response)
+			resp := r.(*ResponseStatus)
 			resp.extra = unsolicited
 
 			imap.lock.Lock()
