@@ -28,22 +28,22 @@ func (rt readerTest) Run(t *testing.T) {
 func TestProtocol(t *testing.T) {
 	tests := []readerTest{
 		readerTest{
-			"* OK [PERMANENTFLAGS ()] Flags permitted.\r\n",
+			"* OK Gimap ready for requests from 12.34 u6if.369\r\n",
 			untagged,
 			&Response{
 				status: OK,
-				code: &ResponsePermanentFlags{[]string{}},
-				text: "Flags permitted.",
+				text: "Gimap ready for requests from 12.34 u6if.369",
 			},
+		},
+		readerTest{
+			"* OK [PERMANENTFLAGS ()] Flags permitted.\r\n",
+			untagged,
+			&ResponsePermanentFlags{[]string{}},
 		},
 		readerTest{
 			"* OK [UIDVALIDITY 2] UIDs valid.\r\n",
 			untagged,
-			&Response{
-				status: OK,
-				code: &ResponseUIDValidity{2},
-				text: "UIDs valid.",
-			},
+			&ResponseUIDValidity{2},
 		},
 		readerTest{
 			"* OK [UIDNEXT 31677] Predicted next UID.\r\n",

@@ -169,9 +169,11 @@ func (imap *IMAP) List(reference string, name string) ([]*ResponseList, os.Error
 }
 
 type ResponseExamine struct {
-	flags  []string
-	exists int
-	recent int
+	Flags  []string
+	Exists int
+	Recent int
+	PermanentFlags []string
+	UIDValidity int
 }
 
 func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
@@ -190,15 +192,16 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 	for _, extra := range resp.extra {
 		switch extra := extra.(type) {
 		case (*ResponseFlags):
-			r.flags = extra.flags
+			r.Flags = extra.flags
 		case (*ResponseExists):
-			r.exists = extra.count
+			r.Exists = extra.count
 		case (*ResponseRecent):
-			r.recent = extra.count
-		//case (*Response):
-		/*
-		 // XXX parse tags
-		*/
+			r.Recent = extra.count
+		case (*ResponsePermanentFlags):
+			r.PermanentFlags = extra.Flags
+		case (*ResponseUIDValidity):
+			value := extra.Value
+			r.UIDValidity = value
 		default:
 			imap.Unsolicited <- extra
 		}

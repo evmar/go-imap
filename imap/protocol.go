@@ -280,7 +280,16 @@ func (r *reader) readUntagged() (resp interface{}, outErr os.Error) {
 	case "OK", "NO", "BAD":
 		resp, err := r.readStatus(command)
 		check(err)
-		return resp, nil
+		if resp.code == nil {
+			return resp, nil
+		}
+		switch resp.code.(type) {
+		case string:
+			// XXX write a parser for this code type.
+			return resp, nil
+		default:
+			return resp.code, nil
+		}
 	}
 
 	num, err := strconv.Atoi(command)
