@@ -6,6 +6,53 @@ import (
 	"fmt"
 )
 
+// Status represents server status codes which are returned by
+// commands.
+type Status int
+
+const (
+	OK Status = iota
+	NO
+	BAD
+)
+
+func (s Status) String() string {
+	return []string{
+		"OK",
+		"NO",
+		"BAD",
+	}[s]
+}
+
+type ResponseStatus struct {
+	status Status
+	code   interface{}
+	text   string
+	extra  []interface{}
+}
+
+func (r *ResponseStatus) String() string {
+	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
+}
+
+type IMAPError struct {
+	status Status
+	text   string
+}
+
+func (e *IMAPError) String() string {
+	return fmt.Sprintf("%s %s", e.status, e.text)
+}
+
+const (
+	WildcardAny          = "%"
+	WildcardAnyRecursive = "*"
+)
+
+type tag int
+
+const untagged = tag(-1)
+
 type reader struct {
 	*parser
 }
@@ -145,6 +192,10 @@ func (r *reader) readStatus(statusStr string) (resp *ResponseStatus, outErr os.E
 	check(err)
 
 	return &ResponseStatus{status, code, rest, nil}, nil
+}
+
+type ResponseCapabilities struct {
+	Capabilities []string
 }
 
 func (r *reader) readCAPABILITY() *ResponseCapabilities {

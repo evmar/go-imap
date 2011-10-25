@@ -15,53 +15,6 @@ func check(err os.Error) {
 	}
 }
 
-// Status represents server status codes which are returned by
-// commands.
-type Status int
-
-const (
-	OK Status = iota
-	NO
-	BAD
-)
-
-func (s Status) String() string {
-	return []string{
-		"OK",
-		"NO",
-		"BAD",
-	}[s]
-}
-
-type ResponseStatus struct {
-	status Status
-	code   interface{}
-	text   string
-	extra  []interface{}
-}
-
-func (r *ResponseStatus) String() string {
-	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
-}
-
-type IMAPError struct {
-	status Status
-	text   string
-}
-
-func (e *IMAPError) String() string {
-	return fmt.Sprintf("%s %s", e.status, e.text)
-}
-
-const (
-	WildcardAny          = "%"
-	WildcardAnyRecursive = "*"
-)
-
-type tag int
-
-const untagged = tag(-1)
-
 type IMAP struct {
 	// Client thread.
 	nextTag int
@@ -131,15 +84,22 @@ func (imap *IMAP) SendSync(format string, args ...interface{}) (*ResponseStatus,
 	return response, nil
 }
 
-func (imap *IMAP) Auth(user string, pass string) (string, os.Error) {
+func (imap *IMAP) Auth(user string, pass string) (string, []string, os.Error) {
 	resp, err := imap.SendSync("LOGIN %s %s", user, pass)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+
+	var caps []string
 	for _, extra := range resp.extra {
-		imap.Unsolicited <- extra
+		switch extra := extra.(type) {
+		case *ResponseCapabilities:
+			caps = extra.Capabilities
+		default:
+			imap.Unsolicited <- extra
+		}
 	}
-	return resp.text, nil
+	return resp.text, caps, nil
 }
 
 func quote(in string) string {
@@ -274,10 +234,6 @@ func (imap *IMAP) ReadLoop() os.Error {
 		}
 	}
 	panic("not reached")
-}
-
-type ResponseCapabilities struct {
-	caps []string
 }
 
 type ResponseList struct {

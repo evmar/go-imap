@@ -46,7 +46,7 @@ func readExtra(im *imap.IMAP) {
 	}
 }
 
-var verbose bool = true
+var verbose bool = false
 
 func main() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
@@ -69,8 +69,9 @@ func main() {
 	log.Printf("server hello: %s", hello)
 
 	log.Printf("logging in")
-	resp, err := im.Auth(user, pass)
+	resp, caps, err := im.Auth(user, pass)
 	check(err)
+	log.Printf("capabilities: %s", caps)
 	log.Printf("%s", resp)
 
 	{
