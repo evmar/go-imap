@@ -37,15 +37,15 @@ func nilOrString(s sexp) *string {
 	return &str
 }
 
-type Parser struct {
+type parser struct {
 	*bufio.Reader
 }
 
-func newParser(r io.Reader) *Parser {
-	return &Parser{bufio.NewReader(r)}
+func newParser(r io.Reader) *parser {
+	return &parser{bufio.NewReader(r)}
 }
 
-func (p *Parser) expect(text string) os.Error {
+func (p *parser) expect(text string) os.Error {
 	buf := make([]byte, len(text))
 
 	_, err := io.ReadFull(p, buf)
@@ -60,11 +60,11 @@ func (p *Parser) expect(text string) os.Error {
 	return nil
 }
 
-func (p *Parser) expectEOL() os.Error {
+func (p *parser) expectEOL() os.Error {
 	return p.expect("\r\n")
 }
 
-func (p *Parser) readToken() (token string, outErr os.Error) {
+func (p *parser) readToken() (token string, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	buf := bytes.NewBuffer(make([]byte, 0, 16))
@@ -85,7 +85,7 @@ func (p *Parser) readToken() (token string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *Parser) readAtom() (outStr string, outErr os.Error) {
+func (p *parser) readAtom() (outStr string, outErr os.Error) {
 	/*
 		ATOM-CHAR       = <any CHAR except atom-specials>
 
@@ -118,7 +118,7 @@ func (p *Parser) readAtom() (outStr string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *Parser) readQuoted() (outStr string, outErr os.Error) {
+func (p *parser) readQuoted() (outStr string, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("\"")
@@ -145,7 +145,7 @@ func (p *Parser) readQuoted() (outStr string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *Parser) readLiteral() (literal []byte, outErr os.Error) {
+func (p *parser) readLiteral() (literal []byte, outErr os.Error) {
 	/*
 		literal         = "{" number "}" CRLF *CHAR8
 	*/
@@ -169,7 +169,7 @@ func (p *Parser) readLiteral() (literal []byte, outErr os.Error) {
 	return
 }
 
-func (p *Parser) readBracketed() (text string, outErr os.Error) {
+func (p *parser) readBracketed() (text string, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	check(p.expect("["))
@@ -179,7 +179,7 @@ func (p *Parser) readBracketed() (text string, outErr os.Error) {
 	return text, nil
 }
 
-func (p *Parser) readSexp() (s []sexp, outErr os.Error) {
+func (p *parser) readSexp() (s []sexp, outErr os.Error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("(")
@@ -226,7 +226,7 @@ func (p *Parser) readSexp() (s []sexp, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *Parser) readParenStringList() ([]string, os.Error) {
+func (p *parser) readParenStringList() ([]string, os.Error) {
 	sexp, err := p.readSexp()
 	if err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ func (p *Parser) readParenStringList() ([]string, os.Error) {
 	return strs, nil
 }
 
-func (p *Parser) readToEOL() (string, os.Error) {
+func (p *parser) readToEOL() (string, os.Error) {
 	line, prefix, err := p.ReadLine()
 	if err != nil {
 		return "", err

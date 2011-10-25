@@ -70,7 +70,7 @@ type IMAP struct {
 	Unsolicited chan interface{}
 
 	// Background thread.
-	r *Parser
+	r *parser
 	w io.Writer
 
 	lock    sync.Mutex
