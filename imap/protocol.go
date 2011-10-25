@@ -24,6 +24,9 @@ func (s Status) String() string {
 	}[s]
 }
 
+// ResponseStatus contains the status response of an OK/BAD/FAIL
+// message.  (Messages of the form "OK [CODE HERE] ..." are parsed
+// as specific other response types, like ResponseUIDValidity.)
 type ResponseStatus struct {
 	status Status
 	code   interface{}
@@ -106,9 +109,13 @@ func (r *reader) readTag() (tag, os.Error) {
 	return untagged, fmt.Errorf("unexpected response %q", str)
 }
 
+// ResponsePermanentFlags contains the flags the client can change
+// permanently.
 type ResponsePermanentFlags struct {
 	Flags []string
 }
+
+// ResponseUIDValidity contains the unique identifier validity value.
 type ResponseUIDValidity struct {
 	Value int
 }
@@ -194,6 +201,8 @@ func (r *reader) readStatus(statusStr string) (resp *ResponseStatus, outErr os.E
 	return &ResponseStatus{status, code, rest, nil}, nil
 }
 
+// ResponseCapabilities contains the server capability list from a
+// CAPABILITIY message.
 type ResponseCapabilities struct {
 	Capabilities []string
 }
@@ -210,6 +219,16 @@ func (r *reader) readCAPABILITY() *ResponseCapabilities {
 	}
 	check(r.expectEOL())
 	return &ResponseCapabilities{caps}
+}
+
+// ResponseList contains the list metadata from a LIST message.
+type ResponseList struct {
+	Inferiors,
+	Selectable,
+	Marked,
+	Children *bool
+	Delim string
+	Name  string
 }
 
 func (r *reader) readLIST() *ResponseList {
@@ -255,11 +274,33 @@ func (r *reader) readLIST() *ResponseList {
 	return list
 }
 
+// ResponseFlags contains the mailbox flags from a FLAGS message.
+type ResponseFlags struct {
+	Flags []string
+}
+
 func (r *reader) readFLAGS() *ResponseFlags {
 	flags, err := r.readParenStringList()
 	check(err)
 	check(r.expectEOL())
 	return &ResponseFlags{flags}
+}
+
+// ResponseFetchEnvelope contains the broken-down message metadata
+// retrieved when fetching the ENVELOPE data of a message.
+type ResponseFetchEnvelope struct {
+	date, subject, inReplyTo, messageId *string
+	from, sender, replyTo, to, cc, bcc  []Address
+}
+
+// ResponseFetch contains the message data from a FETCH message.
+type ResponseFetch struct {
+	Msg                  int
+	Flags                sexp
+	Envelope             ResponseFetchEnvelope
+	InternalDate         string
+	Size                 int
+	Rfc822, Rfc822Header []byte
 }
 
 func (r *reader) readFETCH(num int) *ResponseFetch {
@@ -305,6 +346,17 @@ func (r *reader) readFETCH(num int) *ResponseFetch {
 	}
 	check(r.expectEOL())
 	return fetch
+}
+
+// ResponseExists contains the message count of a mailbox.
+type ResponseExists struct {
+	Count int
+}
+
+// ResponseRecent contains the number of messages with the recent
+// flag set.
+type ResponseRecent struct {
+	Count int
 }
 
 func (r *reader) readUntagged() (resp interface{}, outErr os.Error) {

@@ -152,11 +152,11 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 	for _, extra := range resp.extra {
 		switch extra := extra.(type) {
 		case (*ResponseFlags):
-			r.Flags = extra.flags
+			r.Flags = extra.Flags
 		case (*ResponseExists):
-			r.Exists = extra.count
+			r.Exists = extra.Count
 		case (*ResponseRecent):
-			r.Recent = extra.count
+			r.Recent = extra.Count
 		case (*ResponsePermanentFlags):
 			r.PermanentFlags = extra.Flags
 		case (*ResponseUIDValidity):
@@ -236,26 +236,6 @@ func (imap *IMAP) ReadLoop() os.Error {
 	panic("not reached")
 }
 
-type ResponseList struct {
-	Inferiors,
-	Selectable,
-	Marked,
-	Children *bool
-	Delim string
-	Name  string
-}
-
-type ResponseFlags struct {
-	flags []string
-}
-
-type ResponseExists struct {
-	count int
-}
-type ResponseRecent struct {
-	count int
-}
-
 type Address struct {
 	name, source, address string
 }
@@ -285,19 +265,5 @@ func addressListFromSexp(s sexp) []Address {
 		addrs[i].fromSexp(s.([]sexp))
 	}
 	return addrs
-}
-
-type ResponseFetchEnvelope struct {
-	date, subject, inReplyTo, messageId *string
-	from, sender, replyTo, to, cc, bcc  []Address
-}
-
-type ResponseFetch struct {
-	Msg                  int
-	Flags                sexp
-	Envelope             ResponseFetchEnvelope
-	InternalDate         string
-	Size                 int
-	Rfc822, Rfc822Header []byte
 }
 
