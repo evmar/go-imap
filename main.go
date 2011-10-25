@@ -85,7 +85,7 @@ func main() {
 	}
 
 	{
-		resp, err := im.Examine("INBOX")
+		resp, err := im.Examine("lkml")
 		check(err)
 		log.Printf("%s", resp)
 		log.Printf("%+v", resp)

@@ -139,6 +139,7 @@ type ResponseExamine struct {
 	Recent         int
 	PermanentFlags []string
 	UIDValidity    int
+	UIDNext        int
 }
 
 func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
@@ -165,7 +166,9 @@ func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
 		// XXX unseen
 		case (*ResponsePermanentFlags):
 			r.PermanentFlags = extra.Flags
-		// XXX uidnext
+		case (*ResponseUIDNext):
+			value := extra.Value
+			r.UIDNext = value
 		case (*ResponseUIDValidity):
 			value := extra.Value
 			r.UIDValidity = value

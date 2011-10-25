@@ -118,7 +118,14 @@ type ResponsePermanentFlags struct {
 }
 
 // ResponseUIDValidity contains the unique identifier validity value.
+// See RFC 3501 section 2.3.1.1.
 type ResponseUIDValidity struct {
+	Value int
+}
+
+// ResponseUIDNext contains the next message uid.
+// See RFC 3501 section 2.3.1.1.
+type ResponseUIDNext struct {
 	Value int
 }
 
@@ -171,6 +178,11 @@ func (r *reader) readStatus(statusStr string) (resp *ResponseStatus, outErr os.E
 			num, err := r.readNumber()
 			check(err)
 			code = &ResponseUIDValidity{num}
+			check(r.expect("]"))
+		case "UIDNEXT":
+			num, err := r.readNumber()
+			check(err)
+			code = &ResponseUIDNext{num}
 			check(r.expect("]"))
 		default:
 			text, err := r.ReadString(']')

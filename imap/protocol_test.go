@@ -48,11 +48,7 @@ func TestProtocol(t *testing.T) {
 		readerTest{
 			"* OK [UIDNEXT 31677] Predicted next UID.\r\n",
 			untagged,
-			&ResponseStatus{
-				status: OK,
-				code: "UIDNEXT 31677",
-				text: "Predicted next UID.",
-			},
+			&ResponseUIDNext{31677},
 		},
 		readerTest{
 			"a2 OK [READ-ONLY] INBOX selected. (Success)\r\n",
