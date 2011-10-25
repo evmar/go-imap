@@ -1,4 +1,3 @@
-// Package imap implements an IMAP (RFC 3501) client.
 package imap
 
 import (
@@ -25,15 +24,15 @@ type IMAP struct {
 	r *reader
 	w io.Writer
 
-	lock    sync.Mutex
-	pending map[tag]chan *ResponseStatus
+	pendingLock sync.Mutex
+	pendingTag  tag
+	pendingChan chan interface{}
 }
 
 func New(r io.Reader, w io.Writer) *IMAP {
 	return &IMAP{
 		r:       &reader{newParser(r)},
 		w:       w,
-		pending: make(map[tag]chan *ResponseStatus),
 	}
 }
 
@@ -59,16 +58,17 @@ func (imap *IMAP) Start() (string, os.Error) {
 	return resp.text, nil
 }
 
-func (imap *IMAP) Send(ch chan *ResponseStatus, format string, args ...interface{}) os.Error {
+func (imap *IMAP) Send(ch chan interface{}, format string, args ...interface{}) os.Error {
 	tag := tag(imap.nextTag)
 	imap.nextTag++
 
 	toSend := []byte(fmt.Sprintf("a%d %s\r\n", int(tag), fmt.Sprintf(format, args...)))
 
 	if ch != nil {
-		imap.lock.Lock()
-		imap.pending[tag] = ch
-		imap.lock.Unlock()
+		imap.pendingLock.Lock()
+		imap.pendingTag = tag
+		imap.pendingChan = ch
+		imap.pendingLock.Unlock()
 	}
 
 	_, err := imap.w.Write(toSend)
@@ -76,14 +76,32 @@ func (imap *IMAP) Send(ch chan *ResponseStatus, format string, args ...interface
 }
 
 func (imap *IMAP) SendSync(format string, args ...interface{}) (*ResponseStatus, os.Error) {
-	ch := make(chan *ResponseStatus, 1)
+	ch := make(chan interface{}, 1)
 	err := imap.Send(ch, format, args...)
 	if err != nil {
 		return nil, err
 	}
-	response := <-ch
+
+	var response *ResponseStatus
+	extra := make([]interface{}, 0)
+L:
+	for {
+		r := <-ch
+		switch r := r.(type) {
+		case *ResponseStatus:
+			response = r
+			break L
+		default:
+			extra = append(extra, r)
+		}
+	}
+
+	if len(extra) > 0 {
+		response.extra = extra
+	}
+	// XXX callers discard unsolicited responses if this is not OK
 	if response.status != OK {
-		return nil, &IMAPError{response.status, response.text}
+		return response, &IMAPError{response.status, response.text}
 	}
 	return response, nil
 }
@@ -204,37 +222,35 @@ func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.
 
 // Repeatedly reads messages off the connection and dispatches them.
 func (imap *IMAP) readLoop() os.Error {
-	var unsolicited []interface{}
+	var msgChan chan interface{}
 	for {
 		tag, r, err := imap.r.readResponse()
 		check(err)
+
+		if msgChan == nil {
+			imap.pendingLock.Lock()
+			msgChan = imap.pendingChan
+			imap.pendingLock.Unlock()
+		}
+
 		if tag == untagged {
-			if unsolicited == nil {
-				imap.lock.Lock()
-				hasPending := len(imap.pending) > 0
-				imap.lock.Unlock()
-
-				if hasPending {
-					unsolicited = make([]interface{}, 0, 1)
-				}
-			}
-
-			if unsolicited != nil {
-				unsolicited = append(unsolicited, r)
+			if msgChan != nil {
+				msgChan <- r
 			} else {
 				imap.Unsolicited <- r
 			}
 		} else {
 			resp := r.(*ResponseStatus)
-			resp.extra = unsolicited
 
-			imap.lock.Lock()
-			ch := imap.pending[tag]
-			imap.pending[tag] = nil, false
-			imap.lock.Unlock()
+			imap.pendingLock.Lock()
+			if imap.pendingTag != tag {
+				return fmt.Errorf("expected response tag %s, got %s", imap.pendingTag, tag)
+			}
+			imap.pendingChan = nil
+			imap.pendingLock.Unlock()
 
-			ch <- resp
-			unsolicited = nil
+			msgChan <- resp
+			msgChan = nil
 		}
 	}
 	panic("not reached")
