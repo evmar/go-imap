@@ -50,7 +50,11 @@ func (imap *IMAP) Start() (string, os.Error) {
 		return "", &IMAPError{resp.status, resp.text}
 	}
 
-	imap.StartLoops()
+	go func() {
+		err := imap.readLoop()
+		// XXX what to do with an error on the read thread?
+		panic(err)
+	}()
 
 	return resp.text, nil
 }
@@ -128,6 +132,7 @@ func (imap *IMAP) List(reference string, name string) ([]*ResponseList, os.Error
 	return lists, nil
 }
 
+// ResponseExamine contains the response to examining a mailbox.
 type ResponseExamine struct {
 	Flags          []string
 	Exists         int
@@ -194,14 +199,8 @@ func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.
 	return lists, nil
 }
 
-func (imap *IMAP) StartLoops() {
-	go func() {
-		err := imap.ReadLoop()
-		panic(err)
-	}()
-}
-
-func (imap *IMAP) ReadLoop() os.Error {
+// Repeatedly reads messages off the connection and dispatches them.
+func (imap *IMAP) readLoop() os.Error {
 	var unsolicited []interface{}
 	for {
 		tag, r, err := imap.r.readResponse()

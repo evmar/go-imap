@@ -38,13 +38,15 @@ func (r *ResponseStatus) String() string {
 	return fmt.Sprintf("%s [%s] %s", r.status, r.code, r.text)
 }
 
+// IMAPError is an error returned for IMAP-level errors, such
+// as "unknown mailbox".
 type IMAPError struct {
-	status Status
-	text   string
+	Status Status
+	Text   string
 }
 
 func (e *IMAPError) String() string {
-	return fmt.Sprintf("%s %s", e.status, e.text)
+	return fmt.Sprintf("imap: %s %s", e.Status, e.Text)
 }
 
 const (
