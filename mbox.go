@@ -14,6 +14,7 @@ func newMbox(w io.Writer) *mbox {
 
 func (m *mbox) writeMessage(rfc822 []byte) {
 	m.Write([]byte("From whatever\r\n"))
+	// XXX escape From lines.
 	m.Write(rfc822)
 	m.Write([]byte("\r\n"))
 }
