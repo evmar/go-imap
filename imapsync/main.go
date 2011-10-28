@@ -20,18 +20,23 @@ func check(err os.Error) {
 	}
 }
 
+type progressMessage struct {
+	cur, total int
+	text       string
+}
+
 type UI struct {
-	statusChan chan string
+	statusChan chan interface{}
 	netmon     *netmonReader
 }
 
-func (ui *UI) status(format string, args ...interface{}) {
-	if ui.statusChan != nil {
-		ui.statusChan <- fmt.Sprintf(format, args...)
-	} else {
-		fmt.Printf(format, args...)
-		fmt.Printf("\n")
-	}
+func (ui *UI) log(format string, args ...interface{}) {
+	ui.statusChan <- fmt.Sprintf(format, args...)
+}
+
+func (ui *UI) progress(cur, total int, format string, args ...interface{}) {
+	message := &progressMessage{cur, total, fmt.Sprintf(format, args...)}
+	ui.statusChan <- message
 }
 
 func loadAuth(path string) (string, string) {
@@ -68,7 +73,7 @@ func readExtra(im *imap.IMAP) {
 func (ui *UI) connect(useNetmon bool) *imap.IMAP {
 	user, pass := loadAuth("auth")
 
-	ui.status("connecting...")
+	ui.log("connecting...")
 	conn, err := tls.Dial("tcp", "imap.gmail.com:993", nil)
 	check(err)
 
@@ -85,22 +90,22 @@ func (ui *UI) connect(useNetmon bool) *imap.IMAP {
 
 	hello, err := im.Start()
 	check(err)
-	ui.status("server hello: %s", hello)
+	ui.log("server hello: %s", hello)
 
-	ui.status("logging in...")
+	ui.log("logging in...")
 	resp, caps, err := im.Auth(user, pass)
 	check(err)
-	ui.status("%s", resp)
-	ui.status("server capabilities: %s", caps)
+	ui.log("%s", resp)
+	ui.log("server capabilities: %s", caps)
 
 	return im
 }
 
 func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
-	ui.status("opening %s...", mailbox)
+	ui.log("opening %s...", mailbox)
 	examine, err := im.Examine(mailbox)
 	check(err)
-	ui.status("mailbox status: %+v", examine)
+	ui.log("mailbox status: %+v", examine)
 	readExtra(im)
 
 	f, err := os.Create(mailbox + ".mbox")
@@ -108,68 +113,88 @@ func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
 	mbox := newMbox(f)
 
 	query := fmt.Sprintf("1:%d", examine.Exists)
-	ui.status("fetching messages %s", query)
+	ui.log("requesting messages %s", query)
 
 	ch, err := im.FetchAsync(query, []string{"RFC822"})
 	check(err)
 
 	envelopeDate := time.LocalTime().Format(time.ANSIC)
 
-	i := 1
+	i := 0
+	total := examine.Exists
+	ui.progress(i, total, "fetching messages", i, total)
 L:
 	for {
 		r := <-ch
 		switch r := r.(type) {
 		case *imap.ResponseFetch:
 			mbox.writeMessage("imapsync@none", envelopeDate, r.Rfc822)
-			ui.status("got message %d/%d", i, examine.Exists)
 			i++
+			ui.progress(i, total, "fetching messages")
 		case *imap.ResponseStatus:
-			ui.status("complete %v\n", r)
+			ui.log("complete %v\n", r)
 			break L
 		}
 	}
 	readExtra(im)
 }
 
-func (ui *UI) runFetch(im *imap.IMAP, mailbox string) {
-	ui.statusChan = make(chan string)
+func (ui *UI) runFetch(mailbox string) {
+	ui.statusChan = make(chan interface{})
 	go func() {
 		defer func() {
 			if e := recover(); e != nil {
-				log.Printf("paniced %s", e)
+				ui.statusChan <- e
 			}
 		}()
+		im := ui.connect(true)
 		ui.fetch(im, mailbox)
 		close(ui.statusChan)
 	}()
 
 	ticker := time.NewTicker(1000 * 1000 * 1000)
+	overprint := false
 	status := ""
+	overprintLast := false
 	for ui.statusChan != nil {
-		overprint := true
 		select {
 		case s, stillOpen := <-ui.statusChan:
-			if s != status {
-				overprint = false
+			switch s := s.(type) {
+			case string:
 				status = s
+				overprint = false
+			case *progressMessage:
+				status = fmt.Sprintf("%s [%d/%d]", s.text, s.cur, s.total)
+				overprint = true
+			default:
+				if s != nil {
+					status = s.(os.Error).String()
+					ui.statusChan = nil
+					ticker.Stop()
+				}
 			}
 			if !stillOpen {
 				ui.statusChan = nil
 				ticker.Stop()
 			}
 		case <-ticker.C:
-			ui.netmon.Tick()
+			if ui.netmon != nil {
+				ui.netmon.Tick()
+			}
 		}
-		if overprint {
+
+		if overprintLast {
 			fmt.Printf("\r\x1B[K")
 		} else {
 			fmt.Printf("\n")
 		}
-		if status != "" {
-			fmt.Printf("[%.1fk/s] %s", ui.netmon.Bandwidth() / 1000.0, status)
+		overprintLast = overprint
+		fmt.Printf("%s", status)
+		if overprint && ui.netmon != nil {
+			fmt.Printf(" [%.1fk/s]", ui.netmon.Bandwidth() / 1000.0)
 		}
 	}
+	fmt.Printf("\n")
 }
 
 func usage() {
@@ -208,8 +233,7 @@ func main() {
 			fmt.Printf("must specify mailbox to fetch\n")
 			os.Exit(1)
 		}
-		im := ui.connect(true)
-		ui.runFetch(im, args[0])
+		ui.runFetch(args[0])
 	default:
 		usage()
 	}
