@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"fmt"
 )
 
 type fromEncodingWriter struct {
@@ -54,8 +55,8 @@ func newMbox(w io.Writer) *mbox {
 	return &mbox{w}
 }
 
-func (m *mbox) writeMessage(rfc822 []byte) os.Error {
-	_, err := m.Write([]byte("From whatever\r\n"))
+func (m *mbox) writeMessage(envelopeFrom string, envelopeDate string, rfc822 []byte) os.Error {
+	_, err := m.Write([]byte(fmt.Sprintf("From %s %s\r\n", envelopeFrom, envelopeDate)))
 	if err != nil {
 		return err
 	}

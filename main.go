@@ -113,13 +113,15 @@ func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
 	ch, err := im.FetchAsync(query, []string{"RFC822"})
 	check(err)
 
+	envelopeDate := time.LocalTime().Format(time.ANSIC)
+
 	i := 1
 L:
 	for {
 		r := <-ch
 		switch r := r.(type) {
 		case *imap.ResponseFetch:
-			mbox.writeMessage(r.Rfc822)
+			mbox.writeMessage("imapsync@none", envelopeDate, r.Rfc822)
 			ui.status("got message %d/%d", i, examine.Exists)
 			i++
 		case *imap.ResponseStatus:
