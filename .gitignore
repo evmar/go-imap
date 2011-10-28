@@ -1,6 +1,4 @@
 *.6
-/auth
-/imapsync
 _obj
 _test*
 6.out
