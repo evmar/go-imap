@@ -9,9 +9,9 @@ import (
 	"log"
 	"flag"
 	"fmt"
+	"time"
 )
 
-var verbose *bool = flag.Bool("v", false, "verbose output")
 var dumpProtocol *bool = flag.Bool("dumpprotocol", false, "dump imap stream")
 
 func check(err os.Error) {
@@ -20,9 +20,12 @@ func check(err os.Error) {
 	}
 }
 
-func vprintf(fmt string, args ...interface{}) {
-	if *verbose {
-		log.Printf(fmt, args...)
+var statusChan chan string
+func status(format string, args ...interface{}) {
+	if statusChan != nil {
+		statusChan <- fmt.Sprintf(format, args...)
+	} else {
+		log.Printf(format, args...)
 	}
 }
 
@@ -70,16 +73,16 @@ func connect() *imap.IMAP {
 	im := imap.New(r, conn)
 	im.Unsolicited = make(chan interface{}, 100)
 
-	vprintf("connecting")
+	status("connecting")
 	hello, err := im.Start()
 	check(err)
-	vprintf("server hello: %s", hello)
+	status("server hello: %s", hello)
 
-	vprintf("logging in")
+	status("logging in")
 	resp, caps, err := im.Auth(user, pass)
 	check(err)
-	vprintf("capabilities: %s", caps)
-	vprintf("%s", resp)
+	status("capabilities: %s", caps)
+	status("%s", resp)
 
 	return im
 }
@@ -87,7 +90,7 @@ func connect() *imap.IMAP {
 func fetch(im *imap.IMAP, mailbox string) {
 	examine, err := im.Examine(mailbox)
 	check(err)
-	vprintf("%+v", examine)
+	status("%+v", examine)
 	readExtra(im)
 
 	f, err := os.Create(mailbox + ".mbox")
@@ -95,7 +98,7 @@ func fetch(im *imap.IMAP, mailbox string) {
 	mbox := newMbox(f)
 
 	query := fmt.Sprintf("1:%d", examine.Exists)
-	vprintf("fetching %s", query)
+	status("fetching %s", query)
 
 	ch, err := im.FetchAsync(query, []string{"RFC822"})
 	check(err)
@@ -107,14 +110,38 @@ L:
 		switch r := r.(type) {
 		case *imap.ResponseFetch:
 			mbox.writeMessage(r.Rfc822)
-			fmt.Printf("%d\n", i)
+			status("got message %d/%d", i, examine.Exists)
 			i++
 		case *imap.ResponseStatus:
-			fmt.Printf("%v\n", r)
+			status("complete %v\n", r)
 			break L
 		}
 	}
 	readExtra(im)
+}
+
+func runFetch(im *imap.IMAP, mailbox string) {
+	statusChan := make(chan string)
+	go func() {
+		fetch(im, mailbox)
+		close(statusChan)
+	}()
+
+	ticker := time.NewTicker(1000 * 1000 * 1000)
+	status := ""
+	for i := 0; statusChan != nil; i++ {
+		select {
+		case s, closed := <-statusChan:
+			status = s
+			if closed {
+				statusChan = nil
+			}
+			ticker.Stop()
+		case <-ticker.C:
+			// tick bandwidth monitor here
+		}
+		log.Printf("%d %s\n", i, status)
+	}
 }
 
 func usage() {
@@ -152,7 +179,7 @@ func main() {
 			os.Exit(1)
 		}
 		im := connect()
-		fetch(im, args[0])
+		runFetch(im, args[0])
 	default:
 		usage()
 	}
