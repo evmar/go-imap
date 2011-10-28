@@ -84,6 +84,39 @@ func connect() *imap.IMAP {
 	return im
 }
 
+func fetch(im *imap.IMAP, mailbox string) {
+	examine, err := im.Examine(mailbox)
+	check(err)
+	vprintf("%+v", examine)
+	readExtra(im)
+
+	f, err := os.Create(mailbox + ".mbox")
+	check(err)
+	mbox := newMbox(f)
+
+	query := fmt.Sprintf("1:%d", examine.Exists)
+	vprintf("fetching %s", query)
+
+	ch, err := im.FetchAsync(query, []string{"RFC822"})
+	check(err)
+
+	i := 0
+L:
+	for {
+		r := <-ch
+		switch r := r.(type) {
+		case *imap.ResponseFetch:
+			mbox.writeMessage(r.Rfc822)
+			fmt.Printf("%d\n", i)
+			i++
+		case *imap.ResponseStatus:
+			fmt.Printf("%v\n", r)
+			break L
+		}
+	}
+	readExtra(im)
+}
+
 func usage() {
 	fmt.Printf("usage: %s command\n", os.Args[0])
 	fmt.Printf("commands are:\n")
@@ -118,40 +151,8 @@ func main() {
 			fmt.Printf("must specify mailbox to fetch\n")
 			os.Exit(1)
 		}
-		mailbox := args[0]
-
 		im := connect()
-		examine, err := im.Examine(mailbox)
-		check(err)
-		vprintf("%+v", examine)
-		readExtra(im)
-
-		f, err := os.Create(mailbox + ".mbox")
-		check(err)
-		mbox := newMbox(f)
-
-		query := fmt.Sprintf("1:%d", examine.Exists)
-		vprintf("fetching %s", query)
-
-		ch, err := im.FetchAsync(query, []string{"RFC822"})
-		check(err)
-
-		i := 0
-	L:
-		for {
-			r := <-ch
-			switch r := r.(type) {
-			case *imap.ResponseFetch:
-				mbox.writeMessage(r.Rfc822)
-				fmt.Printf("%d\n", i)
-				i++
-			case *imap.ResponseStatus:
-				fmt.Printf("%v\n", r)
-				break L
-			}
-		}
-		readExtra(im)
-
+		fetch(im, args[0])
 	default:
 		usage()
 	}
