@@ -68,7 +68,7 @@ func readExtra(im *imap.IMAP) {
 func (ui *UI) connect(useNetmon bool) *imap.IMAP {
 	user, pass := loadAuth("auth")
 
-	ui.status("connecting")
+	ui.status("connecting...")
 	conn, err := tls.Dial("tcp", "imap.gmail.com:993", nil)
 	check(err)
 
@@ -87,19 +87,20 @@ func (ui *UI) connect(useNetmon bool) *imap.IMAP {
 	check(err)
 	ui.status("server hello: %s", hello)
 
-	ui.status("logging in")
+	ui.status("logging in...")
 	resp, caps, err := im.Auth(user, pass)
 	check(err)
-	ui.status("capabilities: %s", caps)
 	ui.status("%s", resp)
+	ui.status("server capabilities: %s", caps)
 
 	return im
 }
 
 func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
+	ui.status("opening %s...", mailbox)
 	examine, err := im.Examine(mailbox)
 	check(err)
-	ui.status("%+v", examine)
+	ui.status("mailbox status: %+v", examine)
 	readExtra(im)
 
 	f, err := os.Create(mailbox + ".mbox")
@@ -107,12 +108,12 @@ func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
 	mbox := newMbox(f)
 
 	query := fmt.Sprintf("1:%d", examine.Exists)
-	ui.status("fetching %s", query)
+	ui.status("fetching messages %s", query)
 
 	ch, err := im.FetchAsync(query, []string{"RFC822"})
 	check(err)
 
-	i := 0
+	i := 1
 L:
 	for {
 		r := <-ch
