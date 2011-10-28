@@ -8,5 +8,6 @@ GOFILES=\
 	main.go\
 	mbox.go\
 	debug.go\
+	netmon.go\
 
 include $(GOROOT)/src/Make.cmd

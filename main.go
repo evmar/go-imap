@@ -21,6 +21,8 @@ func check(err os.Error) {
 }
 
 var statusChan chan string
+var netmon *netmonReader
+
 func status(format string, args ...interface{}) {
 	if statusChan != nil {
 		statusChan <- fmt.Sprintf(format, args...)
@@ -60,7 +62,7 @@ func readExtra(im *imap.IMAP) {
 	}
 }
 
-func connect() *imap.IMAP {
+func connect(useNetmon bool) *imap.IMAP {
 	user, pass := loadAuth("auth")
 
 	conn, err := tls.Dial("tcp", "imap.gmail.com:993", nil)
@@ -69,6 +71,10 @@ func connect() *imap.IMAP {
 	var r io.Reader = conn
 	if *dumpProtocol {
 		r = newLoggingReader(r, 300)
+	}
+	if useNetmon {
+		netmon = newNetmonReader(r)
+		r = netmon
 	}
 	im := imap.New(r, conn)
 	im.Unsolicited = make(chan interface{}, 100)
@@ -129,7 +135,7 @@ func runFetch(im *imap.IMAP, mailbox string) {
 
 	ticker := time.NewTicker(1000 * 1000 * 1000)
 	status := ""
-	for i := 0; statusChan != nil; i++ {
+	for statusChan != nil {
 		select {
 		case s, closed := <-statusChan:
 			status = s
@@ -138,9 +144,9 @@ func runFetch(im *imap.IMAP, mailbox string) {
 			}
 			ticker.Stop()
 		case <-ticker.C:
-			// tick bandwidth monitor here
+			netmon.Tick()
 		}
-		log.Printf("%d %s\n", i, status)
+		log.Printf("%.1fk/s %s\n", netmon.Bandwidth() / 1000.0, status)
 	}
 }
 
@@ -165,7 +171,7 @@ func main() {
 
 	switch mode {
 	case "list":
-		im := connect()
+		im := connect(false)
 		mailboxes, err := im.List("", imap.WildcardAny)
 		check(err)
 		fmt.Printf("Available mailboxes:\n")
@@ -178,7 +184,7 @@ func main() {
 			fmt.Printf("must specify mailbox to fetch\n")
 			os.Exit(1)
 		}
-		im := connect()
+		im := connect(true)
 		runFetch(im, args[0])
 	default:
 		usage()
