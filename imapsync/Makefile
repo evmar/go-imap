@@ -1,7 +1,7 @@
 include $(GOROOT)/src/Make.inc
 
-GCIMPORTS=-Iimap/_obj
-LDIMPORTS=-Limap/_obj
+GCIMPORTS=-I../imap/_obj
+LDIMPORTS=-L../imap/_obj
 
 TARG=imapsync
 GOFILES=\
