@@ -5,11 +5,12 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"imap"
 	"io"
 	"log"
 	"os"
 	"time"
+
+	"github.com/martine/go-imap/imap"
 )
 
 var dumpProtocol *bool = flag.Bool("dumpprotocol", false, "dump imap stream")
