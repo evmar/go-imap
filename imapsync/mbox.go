@@ -2,16 +2,15 @@ package main
 
 import (
 	"bytes"
-	"io"
-	"os"
 	"fmt"
+	"io"
 )
 
 type fromEncodingWriter struct {
 	w io.Writer
 }
 
-func (w *fromEncodingWriter) Write(buf []byte) (int, os.Error) {
+func (w *fromEncodingWriter) Write(buf []byte) (int, error) {
 	total := 0
 	for len(buf) > 0 {
 		// Insert a quote for the current line, if needed.
@@ -20,7 +19,7 @@ func (w *fromEncodingWriter) Write(buf []byte) (int, os.Error) {
 			// iterate
 		}
 		magicFrom := []byte("From ")
-		if ofs + len(magicFrom) <= len(buf) &&
+		if ofs+len(magicFrom) <= len(buf) &&
 			bytes.Equal(buf[ofs:ofs+len(magicFrom)], magicFrom) {
 			_, err := w.w.Write([]byte(">"))
 			if err != nil {
@@ -55,7 +54,7 @@ func newMbox(w io.Writer) *mbox {
 	return &mbox{w}
 }
 
-func (m *mbox) writeMessage(envelopeFrom string, envelopeDate string, rfc822 []byte) os.Error {
+func (m *mbox) writeMessage(envelopeFrom string, envelopeDate string, rfc822 []byte) error {
 	_, err := m.Write([]byte(fmt.Sprintf("From %s %s\r\n", envelopeFrom, envelopeDate)))
 	if err != nil {
 		return err

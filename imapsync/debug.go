@@ -9,7 +9,7 @@ import (
 var logger *log.Logger
 
 type LoggingReader struct {
-	r io.Reader
+	r   io.Reader
 	max int
 }
 
@@ -17,7 +17,7 @@ func newLoggingReader(r io.Reader, max int) *LoggingReader {
 	return &LoggingReader{r, max}
 }
 
-func (r *LoggingReader) Read(p []byte) (int, os.Error) {
+func (r *LoggingReader) Read(p []byte) (int, error) {
 	if logger == nil {
 		logger = log.New(os.Stderr, "", log.Ltime)
 	}

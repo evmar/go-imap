@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"io"
 	"sync"
 )
@@ -17,14 +16,14 @@ type netmonReader struct {
 }
 
 func newNetmonReader(r io.Reader) *netmonReader {
-	return &netmonReader{r:r}
+	return &netmonReader{r: r}
 }
 
 func (n *netmonReader) Tick() int {
 	n.lock.Lock()
 	var alpha float32 = 0.9
 	bucket := n.bucket
-	n.estimate = (alpha * float32(n.bucket)) + ((1-alpha) * n.estimate)
+	n.estimate = (alpha * float32(n.bucket)) + ((1 - alpha) * n.estimate)
 	n.bucket = 0
 	n.lock.Unlock()
 	return bucket
@@ -37,7 +36,7 @@ func (n *netmonReader) Bandwidth() float32 {
 	return val
 }
 
-func (n *netmonReader) Read(buf []byte) (int, os.Error) {
+func (n *netmonReader) Read(buf []byte) (int, error) {
 	nb, err := n.r.Read(buf)
 	n.lock.Lock()
 	n.bucket += nb
