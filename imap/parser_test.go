@@ -3,12 +3,12 @@ package imap
 import (
 	"bytes"
 	"fmt"
-	"os"
+	"io"
 	"reflect"
 	"testing"
 )
 
-func testError(t *testing.T, err os.Error, format string, args ...interface{}) {
+func testError(t *testing.T, err error, format string, args ...interface{}) {
 	if err != nil {
 		t.Fatalf("%s: %s", fmt.Sprintf(format, args...), err)
 	}
@@ -16,7 +16,7 @@ func testError(t *testing.T, err os.Error, format string, args ...interface{}) {
 
 type parseTest struct {
 	input    string
-	code     func(p *parser) (interface{}, os.Error)
+	code     func(p *parser) (interface{}, error)
 	expected interface{}
 }
 
@@ -29,7 +29,7 @@ func (test parseTest) Run(t *testing.T) {
 
 	_, err = p.ReadByte()
 	if err != nil {
-		if err != os.EOF {
+		if err != io.EOF {
 			t.Fatalf("parsing %s: %s", test.input, err)
 		}
 	} else {
@@ -44,7 +44,7 @@ func (test parseTest) Run(t *testing.T) {
 func TestParseString(t *testing.T) {
 	parseTest{
 		input:    "\"foo bar\"",
-		code:     func(p *parser) (interface{}, os.Error) { return p.readQuoted() },
+		code:     func(p *parser) (interface{}, error) { return p.readQuoted() },
 		expected: "foo bar",
 	}.Run(t)
 }
@@ -53,13 +53,13 @@ func TestParseLiteral(t *testing.T) {
 	tests := []parseTest{
 		{
 			input:    "{5}\r\n01234",
-			code:     func(p *parser) (interface{}, os.Error) { return p.readLiteral() },
+			code:     func(p *parser) (interface{}, error) { return p.readLiteral() },
 			expected: []byte("01234"),
 		},
 
 		{
 			input:    "({2}\r\nAB abc)",
-			code:     func(p *parser) (interface{}, os.Error) { return p.readSexp() },
+			code:     func(p *parser) (interface{}, error) { return p.readSexp() },
 			expected: []sexp{[]byte("AB"), "abc"},
 		},
 	}
@@ -73,7 +73,7 @@ func TestParseSimple(t *testing.T) {
 	tests := []parseTest{
 		{
 			input: "(\\HasNoChildren \\Foo)",
-			code: func(p *parser) (interface{}, os.Error) {
+			code: func(p *parser) (interface{}, error) {
 				return p.readParenStringList()
 			},
 			expected: []string{"\\HasNoChildren", "\\Foo"},
@@ -88,7 +88,7 @@ func TestParseSimple(t *testing.T) {
 func TestParseComplex(t *testing.T) {
 	parseTest{
 		input: `(ENVELOPE ("Fri, 14 Oct 2011 13:51:22 -0700" "Re: [PATCH 1/1] added code to export CAP_LAST_CAP in /proc/sys/kernel modeled after ngroups_max" (("Andrew Morton" NIL "akpm" "linux-foundation.org")) ((NIL NIL "linux-kernel-owner" "vger.kernel.org")) (("Andrew Morton" NIL "akpm" "linux-foundation.org")) (("Dan Ballard" NIL "dan" "mindstab.net")) (("Ingo Molnar" NIL "mingo" "elte.hu") ("Lennart Poettering" NIL "lennart" "poettering.net") ("Kay Sievers" NIL "kay.sievers" "vrfy.org") (NIL NIL "linux-kernel" "vger.kernel.org")) NIL "<1318460194-31983-1-git-send-email-dan@mindstab.net>" "<20111014135122.4bb95565.akpm@linux-foundation.org>") FLAGS () INTERNALDATE "14-Oct-2011 20:51:30 +0000" RFC822.SIZE 4623)`,
-		code:  func(p *parser) (interface{}, os.Error) { return p.readSexp() },
+		code:  func(p *parser) (interface{}, error) { return p.readSexp() },
 
 		expected: []sexp{"ENVELOPE",
 			[]sexp{"Fri, 14 Oct 2011 13:51:22 -0700",

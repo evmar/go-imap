@@ -3,12 +3,11 @@ package imap
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 )
 
-func check(err os.Error) {
+func check(err error) {
 	if err != nil {
 		panic(err)
 	}
@@ -31,12 +30,12 @@ type IMAP struct {
 
 func New(r io.Reader, w io.Writer) *IMAP {
 	return &IMAP{
-		r:       &reader{newParser(r)},
-		w:       w,
+		r: &reader{newParser(r)},
+		w: w,
 	}
 }
 
-func (imap *IMAP) Start() (string, os.Error) {
+func (imap *IMAP) Start() (string, error) {
 	tag, r, err := imap.r.readResponse()
 	if err != nil {
 		return "", err
@@ -58,7 +57,7 @@ func (imap *IMAP) Start() (string, os.Error) {
 	return resp.text, nil
 }
 
-func (imap *IMAP) Send(ch chan interface{}, format string, args ...interface{}) os.Error {
+func (imap *IMAP) Send(ch chan interface{}, format string, args ...interface{}) error {
 	tag := tag(imap.nextTag)
 	imap.nextTag++
 
@@ -75,7 +74,7 @@ func (imap *IMAP) Send(ch chan interface{}, format string, args ...interface{}) 
 	return err
 }
 
-func (imap *IMAP) SendSync(format string, args ...interface{}) (*ResponseStatus, os.Error) {
+func (imap *IMAP) SendSync(format string, args ...interface{}) (*ResponseStatus, error) {
 	ch := make(chan interface{}, 1)
 	err := imap.Send(ch, format, args...)
 	if err != nil {
@@ -106,7 +105,7 @@ L:
 	return response, nil
 }
 
-func (imap *IMAP) Auth(user string, pass string) (string, []string, os.Error) {
+func (imap *IMAP) Auth(user string, pass string) (string, []string, error) {
 	resp, err := imap.SendSync("LOGIN %s %s", user, pass)
 	if err != nil {
 		return "", nil, err
@@ -131,7 +130,7 @@ func quote(in string) string {
 	return "\"" + in + "\""
 }
 
-func (imap *IMAP) List(reference string, name string) ([]*ResponseList, os.Error) {
+func (imap *IMAP) List(reference string, name string) ([]*ResponseList, error) {
 	/* Responses:  untagged responses: LIST */
 	response, err := imap.SendSync("LIST %s %s", quote(reference), quote(name))
 	if err != nil {
@@ -160,7 +159,7 @@ type ResponseExamine struct {
 	UIDNext        int
 }
 
-func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, os.Error) {
+func (imap *IMAP) Examine(mailbox string) (*ResponseExamine, error) {
 	/*
 	 Responses:  REQUIRED untagged responses: FLAGS, EXISTS, RECENT
 	 REQUIRED OK untagged responses:  UNSEEN,  PERMANENTFLAGS,
@@ -207,7 +206,7 @@ func formatFetch(sequence string, fields []string) string {
 	return fmt.Sprintf("FETCH %s %s", sequence, fieldsStr)
 }
 
-func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.Error) {
+func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, error) {
 	resp, err := imap.SendSync("%s", formatFetch(sequence, fields))
 	if err != nil {
 		return nil, err
@@ -224,7 +223,7 @@ func (imap *IMAP) Fetch(sequence string, fields []string) ([]*ResponseFetch, os.
 	return lists, nil
 }
 
-func (imap *IMAP) FetchAsync(sequence string, fields []string) (chan interface{}, os.Error) {
+func (imap *IMAP) FetchAsync(sequence string, fields []string) (chan interface{}, error) {
 	ch := make(chan interface{})
 	err := imap.Send(ch, formatFetch(sequence, fields))
 	if err != nil {
@@ -252,7 +251,7 @@ func (imap *IMAP) FetchAsync(sequence string, fields []string) (chan interface{}
 }
 
 // Repeatedly reads messages off the connection and dispatches them.
-func (imap *IMAP) readLoop() os.Error {
+func (imap *IMAP) readLoop() error {
 	var msgChan chan interface{}
 	for {
 		tag, r, err := imap.r.readResponse()

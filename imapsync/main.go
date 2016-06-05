@@ -1,20 +1,21 @@
 package main
 
 import (
-	"crypto/tls"
-	"io"
-	"os"
 	"bufio"
-	"imap"
-	"log"
+	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
+	"log"
+	"os"
 	"time"
+
+	"github.com/martine/go-imap/imap"
 )
 
 var dumpProtocol *bool = flag.Bool("dumpprotocol", false, "dump imap stream")
 
-func check(err os.Error) {
+func check(err error) {
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +119,7 @@ func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
 	ch, err := im.FetchAsync(query, []string{"RFC822"})
 	check(err)
 
-	envelopeDate := time.LocalTime().Format(time.ANSIC)
+	envelopeDate := time.Now().Format(time.ANSIC)
 
 	i := 0
 	total := examine.Exists
@@ -168,7 +169,7 @@ func (ui *UI) runFetch(mailbox string) {
 				overprint = true
 			default:
 				if s != nil {
-					status = s.(os.Error).String()
+					status = s.(error).Error()
 					ui.statusChan = nil
 					ticker.Stop()
 				}
@@ -191,7 +192,7 @@ func (ui *UI) runFetch(mailbox string) {
 		overprintLast = overprint
 		fmt.Printf("%s", status)
 		if overprint && ui.netmon != nil {
-			fmt.Printf(" [%.1fk/s]", ui.netmon.Bandwidth() / 1000.0)
+			fmt.Printf(" [%.1fk/s]", ui.netmon.Bandwidth()/1000.0)
 		}
 	}
 	fmt.Printf("\n")

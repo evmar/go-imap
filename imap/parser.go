@@ -3,10 +3,10 @@ package imap
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"strconv"
 )
 
@@ -14,9 +14,9 @@ func init() {
 	log.SetFlags(log.Ltime | log.Lshortfile)
 }
 
-func recoverError(err *os.Error) {
+func recoverError(err *error) {
 	if e := recover(); e != nil {
-		if osErr, ok := e.(os.Error); ok {
+		if osErr, ok := e.(error); ok {
 			*err = osErr
 			return
 		}
@@ -25,6 +25,7 @@ func recoverError(err *os.Error) {
 }
 
 type sexp interface{}
+
 // One of:
 //   string
 //   []sexp
@@ -45,7 +46,7 @@ func newParser(r io.Reader) *parser {
 	return &parser{bufio.NewReader(r)}
 }
 
-func (p *parser) expect(text string) os.Error {
+func (p *parser) expect(text string) error {
 	buf := make([]byte, len(text))
 
 	_, err := io.ReadFull(p, buf)
@@ -60,11 +61,11 @@ func (p *parser) expect(text string) os.Error {
 	return nil
 }
 
-func (p *parser) expectEOL() os.Error {
+func (p *parser) expectEOL() error {
 	return p.expect("\r\n")
 }
 
-func (p *parser) readToken() (token string, outErr os.Error) {
+func (p *parser) readToken() (token string, outErr error) {
 	defer recoverError(&outErr)
 
 	buf := bytes.NewBuffer(make([]byte, 0, 16))
@@ -84,7 +85,7 @@ func (p *parser) readToken() (token string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *parser) readNumber() (num int, outErr os.Error) {
+func (p *parser) readNumber() (num int, outErr error) {
 	defer recoverError(&outErr)
 
 	num = 0
@@ -92,7 +93,7 @@ func (p *parser) readNumber() (num int, outErr os.Error) {
 		c, err := p.ReadByte()
 		check(err)
 		if c >= '0' && c <= '9' {
-			num = num * 10 + int(c - '0')
+			num = num*10 + int(c-'0')
 		} else {
 			check(p.UnreadByte())
 			return num, nil
@@ -102,7 +103,7 @@ func (p *parser) readNumber() (num int, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *parser) readAtom() (outStr string, outErr os.Error) {
+func (p *parser) readAtom() (outStr string, outErr error) {
 	/*
 		ATOM-CHAR       = <any CHAR except atom-specials>
 
@@ -135,7 +136,7 @@ func (p *parser) readAtom() (outStr string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *parser) readQuoted() (outStr string, outErr os.Error) {
+func (p *parser) readQuoted() (outStr string, outErr error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("\"")
@@ -162,7 +163,7 @@ func (p *parser) readQuoted() (outStr string, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *parser) readLiteral() (literal []byte, outErr os.Error) {
+func (p *parser) readLiteral() (literal []byte, outErr error) {
 	/*
 		literal         = "{" number "}" CRLF *CHAR8
 	*/
@@ -186,18 +187,18 @@ func (p *parser) readLiteral() (literal []byte, outErr os.Error) {
 	return
 }
 
-func (p *parser) readBracketed() (text string, outErr os.Error) {
+func (p *parser) readBracketed() (text string, outErr error) {
 	defer recoverError(&outErr)
 
 	check(p.expect("["))
 	text, err := p.ReadString(']')
 	check(err)
-	text = text[0:len(text)-1]
+	text = text[0 : len(text)-1]
 
 	return text, nil
 }
 
-func (p *parser) readSexp() (s []sexp, outErr os.Error) {
+func (p *parser) readSexp() (s []sexp, outErr error) {
 	defer recoverError(&outErr)
 
 	err := p.expect("(")
@@ -244,7 +245,7 @@ func (p *parser) readSexp() (s []sexp, outErr os.Error) {
 	panic("not reached")
 }
 
-func (p *parser) readParenStringList() ([]string, os.Error) {
+func (p *parser) readParenStringList() ([]string, error) {
 	sexp, err := p.readSexp()
 	if err != nil {
 		return nil, err
@@ -260,13 +261,13 @@ func (p *parser) readParenStringList() ([]string, os.Error) {
 	return strs, nil
 }
 
-func (p *parser) readToEOL() (string, os.Error) {
+func (p *parser) readToEOL() (string, error) {
 	line, prefix, err := p.ReadLine()
 	if err != nil {
 		return "", err
 	}
 	if prefix {
-		return "", os.NewError("got line prefix, buffer too small")
+		return "", errors.New("got line prefix, buffer too small")
 	}
 	return string(line), nil
 }
