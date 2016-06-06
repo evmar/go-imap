@@ -1,20 +1,20 @@
 package main
 
 import (
-	"crypto/tls"
-	"io"
-	"os"
 	"bufio"
-	"imap"
-	"log"
+	"crypto/tls"
 	"flag"
 	"fmt"
+	"imap"
+	"io"
+	"log"
+	"os"
 	"time"
 )
 
 var dumpProtocol *bool = flag.Bool("dumpprotocol", false, "dump imap stream")
 
-func check(err os.Error) {
+func check(err error) {
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +118,7 @@ func (ui *UI) fetch(im *imap.IMAP, mailbox string) {
 	ch, err := im.FetchAsync(query, []string{"RFC822"})
 	check(err)
 
-	envelopeDate := time.LocalTime().Format(time.ANSIC)
+	envelopeDate := time.Now().Format(time.ANSIC)
 
 	i := 0
 	total := examine.Exists
@@ -139,18 +139,7 @@ L:
 	readExtra(im)
 }
 
-func (ui *UI) runFetch(mailbox string) {
-	ui.statusChan = make(chan interface{})
-	go func() {
-		defer func() {
-			if e := recover(); e != nil {
-				ui.statusChan <- e
-			}
-		}()
-		im := ui.connect(true)
-		ui.fetch(im, mailbox)
-		close(ui.statusChan)
-	}()
+func (ui *UI) reportOnStatus() {
 
 	ticker := time.NewTicker(1000 * 1000 * 1000)
 	overprint := false
@@ -168,7 +157,7 @@ func (ui *UI) runFetch(mailbox string) {
 				overprint = true
 			default:
 				if s != nil {
-					status = s.(os.Error).String()
+					status = s.(error).Error()
 					ui.statusChan = nil
 					ticker.Stop()
 				}
@@ -191,11 +180,44 @@ func (ui *UI) runFetch(mailbox string) {
 		overprintLast = overprint
 		fmt.Printf("%s", status)
 		if overprint && ui.netmon != nil {
-			fmt.Printf(" [%.1fk/s]", ui.netmon.Bandwidth() / 1000.0)
+			fmt.Printf(" [%.1fk/s]", ui.netmon.Bandwidth()/1000.0)
 		}
 	}
 	fmt.Printf("\n")
+}	
+
+func (ui *UI) runFetch(mailbox string) {
+	ui.statusChan = make(chan interface{})
+	go func() {
+		defer func() {
+			if e := recover(); e != nil {
+				ui.statusChan <- e
+			}
+		}()
+		im := ui.connect(true)
+		ui.fetch(im, mailbox)
+		close(ui.statusChan)
+	}()
+
+	ui.reportOnStatus()
 }
+
+func (ui *UI) runList() {
+	ui.statusChan = make(chan interface{})
+	go func() {
+		im := ui.connect(false)
+		mailboxes, err := im.List("", imap.WildcardAny)
+		check(err)
+		fmt.Printf("Available mailboxes:\n")
+		for _, mailbox := range mailboxes {
+			fmt.Printf("  %s\n", mailbox.Name)
+		}
+		readExtra(im)
+	}()
+
+	ui.reportOnStatus()
+}	
+
 
 func usage() {
 	fmt.Printf("usage: %s command\n", os.Args[0])
@@ -220,14 +242,8 @@ func main() {
 
 	switch mode {
 	case "list":
-		im := ui.connect(false)
-		mailboxes, err := im.List("", imap.WildcardAny)
-		check(err)
-		fmt.Printf("Available mailboxes:\n")
-		for _, mailbox := range mailboxes {
-			fmt.Printf("  %s\n", mailbox.Name)
-		}
-		readExtra(im)
+		ui.runList()
+		println("done")
 	case "fetch":
 		if len(args) < 1 {
 			fmt.Printf("must specify mailbox to fetch\n")
